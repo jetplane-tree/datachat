@@ -1,33 +1,45 @@
-import * as duckdb from "@duckdb/duckdb-wasm";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type DuckDBModule = typeof import("@duckdb/duckdb-wasm");
 
-let db: duckdb.AsyncDuckDB | null = null;
-let conn: duckdb.AsyncDuckDBConnection | null = null;
-let initPromise: Promise<duckdb.AsyncDuckDB> | null = null;
+let duckdb: DuckDBModule | null = null;
+let db: any = null;
+let conn: any = null;
+let initPromise: Promise<any> | null = null;
 
-export async function initDuckDB(): Promise<duckdb.AsyncDuckDB> {
+async function getDuckDB(): Promise<DuckDBModule> {
+  if (duckdb) return duckdb;
+  duckdb = await import("@duckdb/duckdb-wasm");
+  return duckdb;
+}
+
+export async function initDuckDB() {
   if (db) return db;
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
-    // Force MVP bundle (smaller, faster — no pthread overhead)
-    const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (bundle as any).pthreadWorker = undefined;
+    try {
+      const mod = await getDuckDB();
+      const JSDELIVR_BUNDLES = mod.getJsDelivrBundles();
+      const bundle = await mod.selectBundle(JSDELIVR_BUNDLES);
+      (bundle as any).pthreadWorker = undefined;
 
-    const worker_url = URL.createObjectURL(
-      new Blob([`importScripts("${bundle.mainWorker}");`], {
-        type: "text/javascript",
-      })
-    );
+      const worker_url = URL.createObjectURL(
+        new Blob([`importScripts("${bundle.mainWorker}");`], {
+          type: "text/javascript",
+        })
+      );
 
-    const worker = new Worker(worker_url);
-    const logger = new duckdb.ConsoleLogger();
-    db = new duckdb.AsyncDuckDB(logger, worker);
-    await db.instantiate(bundle.mainModule);
-    URL.revokeObjectURL(worker_url);
+      const worker = new Worker(worker_url);
+      const logger = new mod.ConsoleLogger();
+      db = new mod.AsyncDuckDB(logger, worker);
+      await db.instantiate(bundle.mainModule);
+      URL.revokeObjectURL(worker_url);
 
-    return db;
+      return db;
+    } catch (err) {
+      initPromise = null; // allow retry on failure
+      throw err;
+    }
   })();
 
   return initPromise;
@@ -35,14 +47,14 @@ export async function initDuckDB(): Promise<duckdb.AsyncDuckDB> {
 
 /**
  * Preload DuckDB WASM in the background (call from homepage).
- * Non-blocking — failures are silently ignored.
  */
 export function preloadDuckDB(): void {
+  if (typeof window === "undefined") return;
   if (db || initPromise) return;
   initDuckDB().catch(() => {});
 }
 
-export async function getConnection(): Promise<duckdb.AsyncDuckDBConnection> {
+export async function getConnection() {
   if (conn) return conn;
   const database = await initDuckDB();
   conn = await database.connect();
@@ -54,10 +66,10 @@ export async function executeQuery(
 ): Promise<{ columns: string[]; rows: Record<string, unknown>[] }> {
   const connection = await getConnection();
   const result = await connection.query(sql);
-  const columns = result.schema.fields.map((f) => f.name);
-  const rows = result.toArray().map((row) => {
+  const columns = result.schema.fields.map((f: any) => f.name);
+  const rows = result.toArray().map((row: any) => {
     const obj: Record<string, unknown> = {};
-    columns.forEach((col) => {
+    columns.forEach((col: string) => {
       obj[col] = row[col];
     });
     return obj;
@@ -108,10 +120,6 @@ export async function loadData(
   }
 }
 
-/**
- * Load in-memory row data (from file upload) into a DuckDB table.
- * Creates a table via JSON registration.
- */
 export async function loadInMemoryData(
   tableName: string,
   rows: Record<string, unknown>[],
@@ -124,7 +132,6 @@ export async function loadInMemoryData(
   const fileName = `${tableName}_upload.json`;
   await database.registerFileText(fileName, jsonStr);
 
-  // Build column type casts if provided to ensure correct types
   if (columnTypes && columnTypes.length > 0) {
     const castExpressions = columnTypes.map((col) => {
       if (col.type === "INTEGER") {
