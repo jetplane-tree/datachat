@@ -8,9 +8,14 @@ import { Message } from "@/types";
 interface AnalysisListProps {
   messages: Message[];
   isAnalyzing: boolean;
+  onRetry?: (question: string) => void;
 }
 
-export function AnalysisList({ messages, isAnalyzing }: AnalysisListProps) {
+export function AnalysisList({
+  messages,
+  isAnalyzing,
+  onRetry,
+}: AnalysisListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Group messages into pairs (user + assistant)
@@ -30,16 +35,15 @@ export function AnalysisList({ messages, isAnalyzing }: AnalysisListProps) {
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-3xl space-y-4 px-6 py-6">
-        {pairs.map((pair) => (
+        {pairs.map((pair, index) => (
           <AnalysisCard
             key={pair.user.id}
             userMessage={pair.user}
             assistantMessage={pair.assistant}
+            isFollowUp={index > 0}
+            onRetry={onRetry}
           />
         ))}
-
-        {/* Skeleton loading for next analysis */}
-        {isAnalyzing && pairs.length > 0 && !pairs[pairs.length - 1].assistant.analysis && !pairs[pairs.length - 1].assistant.error && null}
 
         <div ref={bottomRef} />
       </div>

@@ -31,10 +31,12 @@ export async function POST(request: NextRequest) {
     const {
       question,
       datasetId,
+      schemaInfo: customSchemaInfo,
       conversationHistory = [],
     }: {
       question: string;
       datasetId: string;
+      schemaInfo?: string;
       conversationHistory: Message[];
     } = body;
 
@@ -45,15 +47,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const dataset = getDatasetById(datasetId);
-    if (!dataset) {
-      return NextResponse.json(
-        { error: `未找到数据集: ${datasetId}` },
-        { status: 404 }
-      );
-    }
+    let schemaInfo: string;
 
-    const schemaInfo = getSchemaPrompt(dataset);
+    if (customSchemaInfo) {
+      // Custom uploaded dataset — schema provided directly by client
+      schemaInfo = customSchemaInfo;
+    } else {
+      const dataset = getDatasetById(datasetId);
+      if (!dataset) {
+        return NextResponse.json(
+          { error: `未找到数据集: ${datasetId}` },
+          { status: 404 }
+        );
+      }
+      schemaInfo = getSchemaPrompt(dataset);
+    }
     const prompt = buildAnalysisPrompt(schemaInfo, question, conversationHistory);
 
     const completion = await client.chat.completions.create({

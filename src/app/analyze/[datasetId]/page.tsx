@@ -8,8 +8,8 @@ import { Header } from "@/components/layout/header";
 import { DataSidebar } from "@/components/analyze/data-sidebar";
 import { QueryInput } from "@/components/analyze/query-input";
 import { AnalysisList } from "@/components/analyze/analysis-list";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Database, Loader2 } from "lucide-react";
+import { Database, Loader2, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Message, AnalysisResult, QueryResult } from "@/types";
 
 export default function AnalyzePage() {
@@ -27,6 +27,10 @@ export default function AnalyzePage() {
     }
     loadDataset(dataset);
   }, [dataset, loadDataset, router]);
+
+  const handleClearConversation = useCallback(() => {
+    setMessages([]);
+  }, []);
 
   const handleSubmit = useCallback(
     async (question: string) => {
@@ -58,7 +62,7 @@ export default function AnalyzePage() {
           body: JSON.stringify({
             question,
             datasetId: dataset.id,
-            conversationHistory: messages,
+            conversationHistory: messages.slice(-6),
           }),
         });
 
@@ -74,14 +78,39 @@ export default function AnalyzePage() {
           insight: data.insight,
         };
 
-        // Execute SQL via DuckDB
+        // Execute SQL via DuckDB — with auto-retry
         let queryResult: QueryResult;
         try {
           queryResult = await runQuery(analysis.sql);
         } catch (sqlErr) {
-          throw new Error(
-            `SQL 执行失败: ${sqlErr instanceof Error ? sqlErr.message : "未知错误"}`
-          );
+          const sqlErrMsg =
+            sqlErr instanceof Error ? sqlErr.message : "未知错误";
+
+          // Auto-retry: send error back to LLM for a corrected SQL
+          try {
+            const retryRes = await fetch("/api/analyze", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                question: `之前生成的 SQL 执行失败，错误信息: "${sqlErrMsg}"。原始SQL: ${analysis.sql}。请修正 SQL 并重新回答原始问题: ${question}`,
+                datasetId: dataset.id,
+                conversationHistory: messages.slice(-6),
+              }),
+            });
+
+            const retryData = await retryRes.json();
+
+            if (retryRes.ok && retryData.sql) {
+              analysis.sql = retryData.sql;
+              analysis.chart = retryData.chart || analysis.chart;
+              analysis.insight = retryData.insight || analysis.insight;
+              queryResult = await runQuery(retryData.sql);
+            } else {
+              throw new Error(sqlErrMsg);
+            }
+          } catch {
+            throw new Error(`SQL 执行失败: ${sqlErrMsg}`);
+          }
         }
 
         setMessages((prev) =>
@@ -113,6 +142,30 @@ export default function AnalyzePage() {
     [dataset, isReady, isAnalyzing, messages, runQuery]
   );
 
+  // Retry handler for error cards
+  const handleRetry = useCallback(
+    (question: string) => {
+      // Remove the failed pair (last user + assistant messages)
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        // Find and remove the last pair with this question
+        for (let i = newMessages.length - 2; i >= 0; i--) {
+          if (
+            newMessages[i].role === "user" &&
+            newMessages[i].content === question
+          ) {
+            newMessages.splice(i, 2);
+            break;
+          }
+        }
+        return newMessages;
+      });
+      // Re-submit
+      setTimeout(() => handleSubmit(question), 100);
+    },
+    [handleSubmit]
+  );
+
   if (!dataset) return null;
 
   return (
@@ -142,29 +195,36 @@ export default function AnalyzePage() {
           {/* Ready state */}
           {isReady && (
             <>
+              {/* Toolbar - clear conversation */}
+              {messages.length > 0 && (
+                <div className="flex items-center justify-end border-b border-border/30 px-4 py-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearConversation}
+                    className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    清空对话
+                  </Button>
+                </div>
+              )}
+
               {/* Analysis results area */}
               <div className="flex-1 overflow-hidden">
                 {messages.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
                     <Database className="h-10 w-10 text-muted-foreground/30" />
-                    <p className="text-sm">
-                      输入问题开始分析
-                    </p>
+                    <p className="text-sm">输入问题开始分析</p>
                   </div>
                 ) : (
                   <AnalysisList
                     messages={messages}
                     isAnalyzing={isAnalyzing}
+                    onRetry={handleRetry}
                   />
                 )}
               </div>
-
-              {/* Loading skeleton for initial */}
-              {isLoading && (
-                <div className="px-6 py-4">
-                  <Skeleton className="h-48 w-full rounded-lg" />
-                </div>
-              )}
 
               {/* Input bar */}
               <QueryInput

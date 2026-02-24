@@ -89,3 +89,43 @@ export async function loadData(
     await loadJsonData(tableName, url);
   }
 }
+
+/**
+ * Load in-memory row data (from file upload) into a DuckDB table.
+ * Creates a table via JSON registration.
+ */
+export async function loadInMemoryData(
+  tableName: string,
+  rows: Record<string, unknown>[],
+  columnTypes?: { name: string; type: string }[]
+): Promise<void> {
+  const database = await initDuckDB();
+  const connection = await getConnection();
+
+  const jsonStr = JSON.stringify(rows);
+  const fileName = `${tableName}_upload.json`;
+  await database.registerFileText(fileName, jsonStr);
+
+  // Build column type casts if provided to ensure correct types
+  if (columnTypes && columnTypes.length > 0) {
+    const castExpressions = columnTypes.map((col) => {
+      if (col.type === "INTEGER") {
+        return `CAST("${col.name}" AS INTEGER) AS "${col.name}"`;
+      } else if (col.type === "DOUBLE") {
+        return `CAST("${col.name}" AS DOUBLE) AS "${col.name}"`;
+      } else if (col.type === "DATE") {
+        return `CAST("${col.name}" AS DATE) AS "${col.name}"`;
+      } else {
+        return `CAST("${col.name}" AS VARCHAR) AS "${col.name}"`;
+      }
+    });
+
+    await connection.query(
+      `CREATE OR REPLACE TABLE ${tableName} AS SELECT ${castExpressions.join(", ")} FROM read_json_auto('${fileName}')`
+    );
+  } else {
+    await connection.query(
+      `CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM read_json_auto('${fileName}')`
+    );
+  }
+}

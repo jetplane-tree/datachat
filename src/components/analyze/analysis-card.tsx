@@ -8,19 +8,27 @@ import {
   Check,
   AlertCircle,
   BarChart3,
+  RefreshCw,
+  MessageSquare,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Message } from "@/types";
 import { ChartRenderer } from "@/components/analyze/chart-renderer";
 
 interface AnalysisCardProps {
   userMessage: Message;
   assistantMessage: Message;
+  isFollowUp?: boolean;
+  onRetry?: (question: string) => void;
 }
 
 export function AnalysisCard({
   userMessage,
   assistantMessage,
+  isFollowUp = false,
+  onRetry,
 }: AnalysisCardProps) {
   const [sqlExpanded, setSqlExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -38,16 +46,40 @@ export function AnalysisCard({
     <Card className="overflow-hidden border border-border/50 shadow-sm">
       {/* Question header */}
       <div className="border-b border-border/30 bg-muted/20 px-5 py-3">
-        <p className="text-sm font-medium text-foreground">
-          {userMessage.content}
-        </p>
+        <div className="flex items-center gap-2">
+          {isFollowUp && (
+            <Badge
+              variant="secondary"
+              className="gap-1 text-[10px] font-normal"
+            >
+              <MessageSquare className="h-2.5 w-2.5" />
+              追问
+            </Badge>
+          )}
+          <p className="text-sm font-medium text-foreground">
+            {userMessage.content}
+          </p>
+        </div>
       </div>
 
       {/* Error state */}
       {error && (
         <div className="flex items-start gap-3 px-5 py-4">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <p className="text-sm text-destructive">{error}</p>
+          <div className="flex-1">
+            <p className="text-sm text-destructive">{error}</p>
+            {onRetry && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onRetry(userMessage.content)}
+                className="mt-2 h-7 gap-1.5 text-xs"
+              >
+                <RefreshCw className="h-3 w-3" />
+                重试
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -65,7 +97,9 @@ export function AnalysisCard({
               <div className="flex h-48 items-center justify-center rounded-lg bg-muted/30">
                 <div className="flex flex-col items-center gap-2 text-muted-foreground">
                   <BarChart3 className="h-8 w-8 text-muted-foreground/40" />
-                  <span className="text-xs">暂无数据</span>
+                  <span className="text-xs">
+                    未找到匹配数据，试试换个问法
+                  </span>
                 </div>
               </div>
             )}
