@@ -1,22 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans, Newsreader } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmSans = DM_Sans({
+  variable: "--font-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const newsreader = Newsreader({
+  variable: "--font-display",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "DataChat - 用自然语言分析数据",
+  title: "DataChat - AI 数据对话分析平台",
   description:
-    "DataChat 是一个 AI 数据分析平台，支持自然语言查询，自动生成 SQL、图表和数据洞察。",
+    "用自然语言和数据对话，AI 自动生成 SQL 查询、图表和数据洞察",
 };
 
 export default function RootLayout({
@@ -27,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${dmSans.variable} ${newsreader.variable} font-sans antialiased`}
       >
         <TooltipProvider delayDuration={300}>
           {children}

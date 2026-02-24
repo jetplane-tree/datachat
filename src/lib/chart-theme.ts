@@ -1,12 +1,13 @@
+// Refined chart palette — indigo-teal-amber with warm undertones
 export const CHART_COLORS = [
-  "#6366f1",
-  "#8b5cf6",
-  "#ec4899",
-  "#f59e0b",
-  "#10b981",
-  "#06b6d4",
-  "#f97316",
-  "#84cc16",
+  "#4f46e5", // indigo
+  "#0d9488", // teal
+  "#f59e0b", // amber
+  "#ec4899", // pink
+  "#8b5cf6", // violet
+  "#06b6d4", // cyan
+  "#f97316", // orange
+  "#84cc16", // lime
 ];
 
 export const chartTheme = {
@@ -14,19 +15,19 @@ export const chartTheme = {
   backgroundColor: "transparent",
   textStyle: {
     fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    color: "#71717a",
+      '"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    color: "#78716c",
     fontSize: 12,
   },
   title: {
     textStyle: {
       fontSize: 14,
       fontWeight: 600,
-      color: "#18181b",
+      color: "#1c1917",
     },
     subtextStyle: {
       fontSize: 12,
-      color: "#71717a",
+      color: "#78716c",
     },
     left: "left",
     padding: [0, 0, 12, 0],
@@ -41,11 +42,11 @@ export const chartTheme = {
   xAxis: {
     axisLine: {
       show: true,
-      lineStyle: { color: "#e4e4e7" },
+      lineStyle: { color: "#e7e5e4" },
     },
     axisTick: { show: false },
     axisLabel: {
-      color: "#71717a",
+      color: "#78716c",
       fontSize: 11,
     },
     splitLine: { show: false },
@@ -54,19 +55,19 @@ export const chartTheme = {
     axisLine: { show: false },
     axisTick: { show: false },
     axisLabel: {
-      color: "#a1a1aa",
+      color: "#a8a29e",
       fontSize: 11,
     },
     splitLine: {
       lineStyle: {
-        color: "#f4f4f5",
+        color: "#f5f5f4",
         type: "dashed" as const,
       },
     },
   },
   legend: {
     textStyle: {
-      color: "#71717a",
+      color: "#78716c",
       fontSize: 11,
     },
     icon: "roundRect",
@@ -77,12 +78,13 @@ export const chartTheme = {
   },
   tooltip: {
     backgroundColor: "#fff",
-    borderColor: "#e4e4e7",
+    borderColor: "#e7e5e4",
     borderWidth: 1,
     textStyle: {
-      color: "#18181b",
+      color: "#1c1917",
       fontSize: 12,
     },
-    extraCssText: "box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-radius: 8px;",
+    extraCssText:
+      "box-shadow: 0 4px 16px rgba(28,25,23,0.08); border-radius: 10px; padding: 10px 14px;",
   },
 };

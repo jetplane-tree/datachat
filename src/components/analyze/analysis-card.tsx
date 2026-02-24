@@ -160,7 +160,7 @@ export function AnalysisCard({
           </div>
 
           {/* Insight */}
-          <div className="mx-5 rounded-lg border border-indigo-100 bg-indigo-50/50 px-4 py-3">
+          <div className="mx-5 rounded-lg border border-indigo-100/60 bg-indigo-50/30 px-4 py-3">
             <p className="text-sm leading-relaxed text-foreground/90">
               {analysis.insight}
             </p>
