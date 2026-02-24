@@ -10,6 +10,7 @@ import {
   BarChart3,
   RefreshCw,
   MessageSquare,
+  WifiOff,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,50 @@ interface AnalysisCardProps {
   assistantMessage: Message;
   isFollowUp?: boolean;
   onRetry?: (question: string) => void;
+}
+
+/**
+ * Classify error type and return a user-friendly message.
+ */
+function getFriendlyError(error: string): {
+  message: string;
+  isNetwork: boolean;
+} {
+  const lower = error.toLowerCase();
+
+  if (
+    lower.includes("network") ||
+    lower.includes("fetch") ||
+    lower.includes("failed to fetch") ||
+    lower.includes("网络") ||
+    lower.includes("econnrefused") ||
+    lower.includes("timeout")
+  ) {
+    return { message: "网络连接失败，请检查网络后重试", isNetwork: true };
+  }
+
+  if (
+    lower.includes("llm") ||
+    lower.includes("openai") ||
+    lower.includes("返回格式") ||
+    lower.includes("返回结果不完整") ||
+    lower.includes("rate limit") ||
+    lower.includes("429") ||
+    lower.includes("502") ||
+    lower.includes("503")
+  ) {
+    return { message: "AI 服务暂时不可用，请稍后重试", isNetwork: false };
+  }
+
+  if (
+    lower.includes("sql 执行失败") ||
+    lower.includes("syntax") ||
+    lower.includes("duckdb")
+  ) {
+    return { message: "分析遇到问题，请尝试换个问法", isNetwork: false };
+  }
+
+  return { message: error, isNetwork: false };
 }
 
 export function AnalysisCard({
@@ -42,8 +87,10 @@ export function AnalysisCard({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const friendlyError = error ? getFriendlyError(error) : null;
+
   return (
-    <Card className="overflow-hidden border border-border/50 shadow-sm">
+    <Card className={`overflow-hidden border shadow-sm ${error ? "border-destructive/20" : "border-border/50"}`}>
       {/* Question header */}
       <div className="border-b border-border/30 bg-muted/20 px-5 py-3">
         <div className="flex items-center gap-2">
@@ -63,11 +110,18 @@ export function AnalysisCard({
       </div>
 
       {/* Error state */}
-      {error && (
+      {error && friendlyError && (
         <div className="flex items-start gap-3 px-5 py-4">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          {friendlyError.isNetwork ? (
+            <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          ) : (
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          )}
           <div className="flex-1">
-            <p className="text-sm text-destructive">{error}</p>
+            <p className="text-sm text-destructive">{friendlyError.message}</p>
+            {friendlyError.message !== error && (
+              <p className="mt-1 text-xs text-muted-foreground">{error}</p>
+            )}
             {onRetry && (
               <Button
                 variant="outline"
