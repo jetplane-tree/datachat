@@ -60,10 +60,10 @@ export const datasets: Dataset[] = [
       "不同支付方式的使用占比是多少？",
       "客单价最高的前10个客户是谁？",
     ],
-    parquetFiles: {
-      orders: "/data/ecommerce/orders.parquet",
-      products: "/data/ecommerce/products.parquet",
-      customers: "/data/ecommerce/customers.parquet",
+    dataFiles: {
+      orders: "/data/ecommerce/orders.json",
+      products: "/data/ecommerce/products.json",
+      customers: "/data/ecommerce/customers.json",
     },
   },
   {
@@ -119,10 +119,10 @@ export const datasets: Dataset[] = [
       "页面浏览的转化漏斗是怎样的？",
       "iOS和Android用户的行为有什么差异？",
     ],
-    parquetFiles: {
-      users: "/data/user-behavior/users.parquet",
-      events: "/data/user-behavior/events.parquet",
-      sessions: "/data/user-behavior/sessions.parquet",
+    dataFiles: {
+      users: "/data/user-behavior/users.json",
+      events: "/data/user-behavior/events.json",
+      sessions: "/data/user-behavior/sessions.json",
     },
   },
   {
@@ -180,10 +180,10 @@ export const datasets: Dataset[] = [
       "春节大促期间每日的转化趋势？",
       "不同活动类型的平均获客成本是多少？",
     ],
-    parquetFiles: {
-      campaigns: "/data/marketing/campaigns.parquet",
-      channels: "/data/marketing/channels.parquet",
-      conversions: "/data/marketing/conversions.parquet",
+    dataFiles: {
+      campaigns: "/data/marketing/campaigns.json",
+      channels: "/data/marketing/channels.json",
+      conversions: "/data/marketing/conversions.json",
     },
   },
 ];

@@ -8,7 +8,10 @@
       "Bash(npm config:*)",
       "Bash(git:*)",
       "Bash(npx shadcn@latest:*)",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npm ls:*)",
+      "Bash(node:*)"
     ]
   }
 }

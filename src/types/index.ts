@@ -20,7 +20,7 @@ export interface Dataset {
   icon: string;
   tables: DatasetTable[];
   presetQuestions: string[];
-  parquetFiles: Record<string, string>;
+  dataFiles: Record<string, string>;
 }
 
 // LLM response

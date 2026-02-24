@@ -47,7 +47,7 @@ export async function executeQuery(
   return { columns, rows };
 }
 
-export async function loadParquetFromUrl(
+export async function loadJsonData(
   tableName: string,
   url: string
 ): Promise<void> {
@@ -55,12 +55,10 @@ export async function loadParquetFromUrl(
   const connection = await getConnection();
 
   const response = await fetch(url);
-  const buffer = await response.arrayBuffer();
-  await database.registerFileBuffer(
-    `${tableName}.parquet`,
-    new Uint8Array(buffer)
-  );
+  const text = await response.text();
+  const fileName = `${tableName}.json`;
+  await database.registerFileText(fileName, text);
   await connection.query(
-    `CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM read_parquet('${tableName}.parquet')`
+    `CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM read_json_auto('${fileName}')`
   );
 }
