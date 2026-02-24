@@ -177,7 +177,7 @@ export default function AboutPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-foreground">
-                    7 年数据分析师，正在探索 AI 应用开发
+                    [你的名字]
                   </p>
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                     热衷于将数据分析经验与前沿 AI
@@ -195,11 +195,11 @@ export default function AboutPage() {
                       GitHub
                     </a>
                     <a
-                      href="mailto:hello@example.com"
+                      href="mailto:your@email.com"
                       className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
                     >
                       <Mail className="h-3.5 w-3.5" />
-                      hello@example.com
+                      [联系方式]
                     </a>
                   </div>
                 </div>
