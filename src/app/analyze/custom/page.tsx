@@ -16,6 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AccessGate, useAccessCode } from "@/components/access-gate";
 import { Dataset, Message, AnalysisResult, QueryResult } from "@/types";
 
 const TABLE_NAME = "uploaded_data";
@@ -23,6 +24,7 @@ const MAX_FILE_SIZE_WARNING = 10 * 1024 * 1024; // 10MB
 
 export default function CustomAnalyzePage() {
   const { isLoading, isReady, error, loadCustomData, runQuery } = useDuckDB();
+  const { code: accessCode, loaded: codeLoaded, saveCode, clearCode } = useAccessCode();
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -160,12 +162,17 @@ export default function CustomAnalyzePage() {
             datasetId: "custom",
             schemaInfo,
             conversationHistory: messages.slice(-6),
+            accessCode,
           }),
         });
 
         const data = await res.json();
 
         if (!res.ok) {
+          if (res.status === 403) {
+            clearCode();
+            throw new Error("访问密码已失效，请重新输入");
+          }
           throw new Error(data.error || "分析请求失败");
         }
 
@@ -193,6 +200,7 @@ export default function CustomAnalyzePage() {
                 datasetId: "custom",
                 schemaInfo,
                 conversationHistory: messages.slice(-6),
+                accessCode,
               }),
             });
 
@@ -253,7 +261,7 @@ export default function CustomAnalyzePage() {
         setIsAnalyzing(false);
       }
     },
-    [dataset, isReady, isAnalyzing, messages, runQuery]
+    [dataset, isReady, isAnalyzing, messages, runQuery, accessCode, clearCode]
   );
 
   // Retry handler for error cards
@@ -280,6 +288,11 @@ export default function CustomAnalyzePage() {
   );
 
   // Upload UI — shown when no data is loaded yet
+  if (!codeLoaded) return null;
+  if (!accessCode) {
+    return <AccessGate onVerified={saveCode} />;
+  }
+
   if (!dataset && !isParsing && !isLoading) {
     return (
       <div className="flex h-screen flex-col bg-background">

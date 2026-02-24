@@ -8,7 +8,6 @@ import {
   BarChart3,
   MessageSquare,
   Code2,
-  Github,
   Mail,
   User,
 } from "lucide-react";
@@ -177,7 +176,7 @@ export default function AboutPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-foreground">
-                    [你的名字]
+                    Kamook
                   </p>
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                     热衷于将数据分析经验与前沿 AI
@@ -186,20 +185,11 @@ export default function AboutPage() {
                   </p>
                   <div className="mt-4 flex items-center gap-4">
                     <a
-                      href="https://github.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      <Github className="h-3.5 w-3.5" />
-                      GitHub
-                    </a>
-                    <a
-                      href="mailto:your@email.com"
+                      href="mailto:aloiwatermelon@hotmail.com"
                       className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
                     >
                       <Mail className="h-3.5 w-3.5" />
-                      [联系方式]
+                      aloiwatermelon@hotmail.com
                     </a>
                   </div>
                 </div>

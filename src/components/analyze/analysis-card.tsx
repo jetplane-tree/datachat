@@ -23,6 +23,7 @@ interface AnalysisCardProps {
   assistantMessage: Message;
   isFollowUp?: boolean;
   onRetry?: (question: string) => void;
+  analyzeStage?: string;
 }
 
 /**
@@ -74,6 +75,7 @@ export function AnalysisCard({
   assistantMessage,
   isFollowUp = false,
   onRetry,
+  analyzeStage,
 }: AnalysisCardProps) {
   const [sqlExpanded, setSqlExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -203,11 +205,15 @@ export function AnalysisCard({
       {/* Loading state (no analysis, no error) */}
       {!analysis && !error && (
         <div className="px-5 py-8">
-          <div className="flex items-center justify-center gap-2 text-muted-foreground">
-            <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
-            <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400 [animation-delay:150ms]" />
-            <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400 [animation-delay:300ms]" />
-            <span className="ml-2 text-sm">分析中...</span>
+          <div className="flex flex-col items-center justify-center gap-3">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400" />
+              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400 [animation-delay:150ms]" />
+              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-400 [animation-delay:300ms]" />
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {analyzeStage || "分析中..."}
+            </span>
           </div>
         </div>
       )}

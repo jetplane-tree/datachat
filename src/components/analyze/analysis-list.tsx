@@ -8,12 +8,14 @@ import { Message } from "@/types";
 interface AnalysisListProps {
   messages: Message[];
   isAnalyzing: boolean;
+  analyzeStage?: string;
   onRetry?: (question: string) => void;
 }
 
 export function AnalysisList({
   messages,
   isAnalyzing,
+  analyzeStage,
   onRetry,
 }: AnalysisListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -42,6 +44,11 @@ export function AnalysisList({
             assistantMessage={pair.assistant}
             isFollowUp={index > 0}
             onRetry={onRetry}
+            analyzeStage={
+              index === pairs.length - 1 && isAnalyzing
+                ? analyzeStage
+                : undefined
+            }
           />
         ))}
 

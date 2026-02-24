@@ -1,11 +1,13 @@
 import { Header } from "@/components/layout/header";
 import { DatasetCard } from "@/components/home/dataset-card";
 import { UploadCard } from "@/components/home/upload-card";
+import { DuckDBPreloader } from "@/components/duckdb-preloader";
 import { datasets } from "@/lib/dataset-registry";
 
 export default function Home() {
   return (
     <div className="relative min-h-screen bg-background">
+      <DuckDBPreloader />
       {/* Subtle gradient background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-[400px] left-1/2 h-[800px] w-[800px] -translate-x-1/2 rounded-full bg-indigo-100/40 blur-[120px]" />

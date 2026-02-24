@@ -10,15 +10,18 @@ import { QueryInput } from "@/components/analyze/query-input";
 import { AnalysisList } from "@/components/analyze/analysis-list";
 import { Database, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AccessGate, useAccessCode } from "@/components/access-gate";
 import { Message, AnalysisResult, QueryResult } from "@/types";
 
 export default function AnalyzePage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const router = useRouter();
   const dataset = getDatasetById(datasetId);
-  const { isLoading, isReady, error, loadDataset, runQuery } = useDuckDB();
+  const { isLoading, isReady, error, loadingStage, loadDataset, runQuery } = useDuckDB();
+  const { code: accessCode, loaded: codeLoaded, saveCode, clearCode } = useAccessCode();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzeStage, setAnalyzeStage] = useState("");
 
   useEffect(() => {
     if (!dataset) {
@@ -53,6 +56,7 @@ export default function AnalyzePage() {
 
       setMessages((prev) => [...prev, userMessage, placeholderMessage]);
       setIsAnalyzing(true);
+      setAnalyzeStage("AI 正在理解你的问题...");
 
       try {
         // Call LLM API
@@ -63,12 +67,17 @@ export default function AnalyzePage() {
             question,
             datasetId: dataset.id,
             conversationHistory: messages.slice(-6),
+            accessCode,
           }),
         });
 
         const data = await res.json();
 
         if (!res.ok) {
+          if (res.status === 403) {
+            clearCode();
+            throw new Error("访问密码已失效，请重新输入");
+          }
           throw new Error(data.error || "分析请求失败");
         }
 
@@ -79,6 +88,7 @@ export default function AnalyzePage() {
         };
 
         // Execute SQL via DuckDB — with auto-retry
+        setAnalyzeStage("正在执行数据查询...");
         let queryResult: QueryResult;
         try {
           queryResult = await runQuery(analysis.sql);
@@ -88,6 +98,7 @@ export default function AnalyzePage() {
 
           // Auto-retry: send error back to LLM for a corrected SQL
           try {
+            setAnalyzeStage("SQL 出错，正在自动修正...");
             const retryRes = await fetch("/api/analyze", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -95,6 +106,7 @@ export default function AnalyzePage() {
                 question: `之前生成的 SQL 执行失败，错误信息: "${sqlErrMsg}"。原始SQL: ${analysis.sql}。请修正 SQL 并重新回答原始问题: ${question}`,
                 datasetId: dataset.id,
                 conversationHistory: messages.slice(-6),
+                accessCode,
               }),
             });
 
@@ -137,9 +149,10 @@ export default function AnalyzePage() {
         );
       } finally {
         setIsAnalyzing(false);
+        setAnalyzeStage("");
       }
     },
-    [dataset, isReady, isAnalyzing, messages, runQuery]
+    [dataset, isReady, isAnalyzing, messages, runQuery, accessCode, clearCode]
   );
 
   // Retry handler for error cards
@@ -168,6 +181,12 @@ export default function AnalyzePage() {
 
   if (!dataset) return null;
 
+  // Show access gate if no code stored yet
+  if (!codeLoaded) return null;
+  if (!accessCode) {
+    return <AccessGate onVerified={saveCode} />;
+  }
+
   return (
     <div className="flex h-screen flex-col bg-background">
       <Header />
@@ -179,9 +198,24 @@ export default function AnalyzePage() {
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Loading state */}
           {isLoading && (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
-              <p className="text-sm">正在加载数据引擎...</p>
+            <div className="flex flex-1 flex-col items-center justify-center gap-5 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+              {loadingStage && (
+                <div className="flex w-64 flex-col items-center gap-3">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-100">
+                    <div
+                      className="h-full rounded-full bg-indigo-500 transition-all duration-500 ease-out"
+                      style={{
+                        width: `${(loadingStage.step / loadingStage.totalSteps) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-sm">{loadingStage.label}</p>
+                  <p className="text-xs text-muted-foreground/60">
+                    {loadingStage.step} / {loadingStage.totalSteps}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -221,6 +255,7 @@ export default function AnalyzePage() {
                   <AnalysisList
                     messages={messages}
                     isAnalyzing={isAnalyzing}
+                    analyzeStage={analyzeStage}
                     onRetry={handleRetry}
                   />
                 )}

@@ -10,6 +10,29 @@ const client = new OpenAI({
 });
 
 const model = process.env.LLM_MODEL || "gpt-4o-mini";
+const ACCESS_CODE = process.env.ACCESS_CODE || "";
+
+/* ── Simple in-memory rate limiter ── */
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
+const RATE_LIMIT_MAX = 10; // max requests per window per IP
+
+function checkRateLimit(ip: string): { allowed: boolean; remaining: number } {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
+    return { allowed: true, remaining: RATE_LIMIT_MAX - 1 };
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return { allowed: false, remaining: 0 };
+  }
+
+  entry.count++;
+  return { allowed: true, remaining: RATE_LIMIT_MAX - entry.count };
+}
 
 function extractJSON(text: string): string {
   // Try to extract JSON from markdown code blocks
@@ -27,7 +50,28 @@ function extractJSON(text: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    // ── Access code check ──
     const body = await request.json();
+    if (ACCESS_CODE && body.accessCode !== ACCESS_CODE) {
+      return NextResponse.json(
+        { error: "访问密码错误" },
+        { status: 403 }
+      );
+    }
+
+    // ── Rate limit check ──
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip") ||
+      "unknown";
+    const { allowed, remaining } = checkRateLimit(ip);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "请求过于频繁，请稍后再试（每小时限 10 次）" },
+        { status: 429 }
+      );
+    }
+
     const {
       question,
       datasetId,
@@ -108,7 +152,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ sql, chart, insight });
+    return NextResponse.json({ sql, chart, insight }, {
+      headers: { "X-RateLimit-Remaining": String(remaining) },
+    });
   } catch (error: unknown) {
     console.error("Analysis API error:", error);
     const message =
