@@ -1,16 +1,21 @@
 /**
  * Generate Demo Datasets for DataChat
  *
- * Generates 3 realistic Chinese business demo datasets as JSON files:
+ * Generates 3 realistic Chinese business demo datasets as Parquet files:
  * 1. Ecommerce (电商销售) - orders, products, customers
  * 2. User Behavior (用户行为) - users, events, sessions
  * 3. Marketing (营销活动) - campaigns, channels, conversions
  *
- * Uses seeded PRNG for reproducibility.
+ * Uses seeded PRNG for reproducibility and DuckDB for Parquet output.
+ *
+ * Run: npx tsx scripts/generate-datasets.ts
  */
 
 import * as fs from "fs";
 import * as path from "path";
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const duckdb = require("@duckdb/node-bindings");
 
 // =============================================================================
 // Seeded Random Number Generator (Mulberry32)
@@ -48,7 +53,8 @@ function createRNG(seed: number) {
     normal(mean: number, stddev: number): number {
       const u1 = this.next();
       const u2 = this.next();
-      const z = Math.sqrt(-2 * Math.log(u1 || 0.0001)) * Math.cos(2 * Math.PI * u2);
+      const z =
+        Math.sqrt(-2 * Math.log(u1 || 0.0001)) * Math.cos(2 * Math.PI * u2);
       return mean + z * stddev;
     },
     /** Shuffle array in place */
@@ -91,8 +97,10 @@ function randomDate(
 }
 
 /** Generate a date in 2024 with monthly weights for seasonal distribution */
-function weightedDate2024(rng: ReturnType<typeof createRNG>, monthWeights: number[]): string {
-  // Pick month based on weights
+function weightedDate2024(
+  rng: ReturnType<typeof createRNG>,
+  monthWeights: number[]
+): string {
   const months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
   const month = rng.pickWeighted(months, monthWeights);
   const maxDay = daysInMonth(2024, month);
@@ -135,23 +143,28 @@ const CITIES = [
 ];
 
 const CITY_REGION_MAP: Record<string, string> = {
-  "上海": "华东", "北京": "华北", "广州": "华南", "深圳": "华南",
-  "杭州": "华东", "南京": "华东", "成都": "西南", "武汉": "华中",
-  "重庆": "西南", "苏州": "华东", "天津": "华北", "西安": "华中",
-  "长沙": "华中", "郑州": "华中", "东莞": "华南", "青岛": "华东",
-  "沈阳": "华北", "宁波": "华东", "昆明": "西南", "大连": "华北",
-  "厦门": "华东", "合肥": "华东", "佛山": "华南", "福州": "华东",
-  "哈尔滨": "华北", "济南": "华东", "温州": "华东", "无锡": "华东",
-  "南宁": "华南", "石家庄": "华北",
+  上海: "华东", 北京: "华北", 广州: "华南", 深圳: "华南",
+  杭州: "华东", 南京: "华东", 成都: "西南", 武汉: "华中",
+  重庆: "西南", 苏州: "华东", 天津: "华北", 西安: "华中",
+  长沙: "华中", 郑州: "华中", 东莞: "华南", 青岛: "华东",
+  沈阳: "华北", 宁波: "华东", 昆明: "西南", 大连: "华北",
+  厦门: "华东", 合肥: "华东", 佛山: "华南", 福州: "华东",
+  哈尔滨: "华北", 济南: "华东", 温州: "华东", 无锡: "华东",
+  南宁: "华南", 石家庄: "华北",
 };
 
 const REGIONS = ["华东", "华南", "华北", "华中", "西南"];
-const REGION_WEIGHTS = [35, 20, 20, 15, 10]; // East China has the most ecommerce
+const REGION_WEIGHTS = [35, 20, 20, 15, 10];
 
-const CATEGORIES = ["数码配件", "服装鞋帽", "家居用品", "食品饮料", "美妆护肤", "图书文具", "运动户外", "母婴用品"];
-const CATEGORY_WEIGHTS = [20, 25, 15, 12, 13, 5, 5, 5];
+// Per spec: 数码配件, 服饰鞋包, 美妆护肤, 食品饮料, 家居日用, 运动户外, 图书文具, 母婴用品
+const CATEGORIES = [
+  "数码配件", "服饰鞋包", "美妆护肤", "食品饮料",
+  "家居日用", "运动户外", "图书文具", "母婴用品",
+];
+const CATEGORY_WEIGHTS = [20, 25, 13, 12, 15, 5, 5, 5];
 
-const PAYMENT_METHODS = ["支付宝", "微信支付", "银行卡", "信用卡"];
+// Per spec: 支付宝, 微信支付, 银行卡, 花呗
+const PAYMENT_METHODS = ["支付宝", "微信支付", "银行卡", "花呗"];
 const PAYMENT_WEIGHTS = [35, 40, 15, 10];
 
 const MEMBERSHIP_LEVELS = ["普通", "银卡", "金卡", "钻石"];
@@ -164,18 +177,18 @@ const GENDERS = ["男", "女"];
 
 // Monthly order weights for ecommerce - Q4 has Double 11/12 peaks
 const ECOMMERCE_MONTH_WEIGHTS = [
-  6,   // Jan - post New Year
-  4,   // Feb - Chinese New Year lull
-  7,   // Mar - spring
-  7,   // Apr
-  8,   // May - 5.1 holiday
-  10,  // Jun - 6.18 promotion
-  7,   // Jul
-  7,   // Aug - back to school
-  8,   // Sep
-  9,   // Oct - National Day
-  18,  // Nov - Double 11
-  14,  // Dec - Double 12
+  6,  // Jan - post New Year
+  4,  // Feb - Chinese New Year lull
+  7,  // Mar - spring
+  7,  // Apr
+  8,  // May - 5.1 holiday
+  10, // Jun - 6.18 promotion
+  7,  // Jul
+  7,  // Aug - back to school
+  8,  // Sep
+  9,  // Oct - National Day
+  18, // Nov - Double 11
+  14, // Dec - Double 12
 ];
 
 // =============================================================================
@@ -186,8 +199,8 @@ interface ProductDef {
   category: string;
   names: string[];
   brands: string[];
-  priceRange: [number, number]; // cost price range
-  markup: [number, number]; // markup multiplier range
+  priceRange: [number, number];
+  markup: [number, number];
 }
 
 const PRODUCT_DEFS: ProductDef[] = [
@@ -205,7 +218,7 @@ const PRODUCT_DEFS: ProductDef[] = [
     markup: [1.5, 3.0],
   },
   {
-    category: "服装鞋帽",
+    category: "服饰鞋包",
     names: [
       "纯棉T恤", "牛仔裤", "连衣裙", "运动鞋", "棒球帽",
       "羽绒服", "风衣", "卫衣", "休闲裤", "衬衫",
@@ -216,32 +229,6 @@ const PRODUCT_DEFS: ProductDef[] = [
     brands: ["优衣库", "海澜之家", "太平鸟", "李宁", "安踏", "波司登", "森马", "以纯"],
     priceRange: [30, 500],
     markup: [1.8, 4.0],
-  },
-  {
-    category: "家居用品",
-    names: [
-      "收纳盒", "毛巾套装", "垃圾桶", "衣架", "枕头",
-      "被子", "床单", "台灯", "花瓶", "保温杯",
-      "厨房置物架", "调味罐套装", "拖把", "洗碗海绵", "密封罐",
-      "桌布", "地毯", "窗帘", "香薰蜡烛", "钟表",
-      "抱枕", "沙发垫", "浴室防滑垫", "晾衣架", "鞋架",
-    ],
-    brands: ["无印良品", "宜家", "网易严选", "京造", "小米", "苏泊尔", "美的", "九阳"],
-    priceRange: [10, 300],
-    markup: [1.6, 3.5],
-  },
-  {
-    category: "食品饮料",
-    names: [
-      "坚果礼盒", "巧克力", "饼干", "牛肉干", "绿茶",
-      "咖啡豆", "蜂蜜", "麦片", "果汁", "矿泉水",
-      "方便面", "酱油", "食用油", "大米", "零食大礼包",
-      "即饮咖啡", "蛋白棒", "果干混合", "奶酪", "酸奶",
-      "辣条", "薯片", "海苔", "红枣", "枸杞",
-    ],
-    brands: ["三只松鼠", "百草味", "良品铺子", "农夫山泉", "蒙牛", "伊利", "旺旺", "统一"],
-    priceRange: [5, 80],
-    markup: [1.3, 2.5],
   },
   {
     category: "美妆护肤",
@@ -257,17 +244,30 @@ const PRODUCT_DEFS: ProductDef[] = [
     markup: [2.0, 5.0],
   },
   {
-    category: "图书文具",
+    category: "食品饮料",
     names: [
-      "笔记本", "中性笔", "彩色马克笔", "文件夹", "计算器",
-      "便利贴", "书签", "手账本", "钢笔", "橡皮擦",
-      "小说", "教材辅导", "绘本", "工具书", "考试真题",
-      "文具套装", "桌面收纳", "书立", "名片夹", "白板",
-      "画材套装", "日历", "胶带", "印章", "明信片",
+      "坚果礼盒", "巧克力", "饼干", "牛肉干", "绿茶",
+      "咖啡豆", "蜂蜜", "麦片", "果汁", "矿泉水",
+      "方便面", "酱油", "食用油", "大米", "零食大礼包",
+      "即饮咖啡", "蛋白棒", "果干混合", "奶酪", "酸奶",
+      "辣条", "薯片", "海苔", "红枣", "枸杞",
     ],
-    brands: ["晨光", "得力", "百乐", "斑马", "三菱", "国誉", "当当", "新华书店"],
-    priceRange: [3, 60],
-    markup: [1.5, 3.0],
+    brands: ["三只松鼠", "百草味", "良品铺子", "农夫山泉", "蒙牛", "伊利", "旺旺", "统一"],
+    priceRange: [5, 80],
+    markup: [1.3, 2.5],
+  },
+  {
+    category: "家居日用",
+    names: [
+      "收纳盒", "毛巾套装", "垃圾桶", "衣架", "枕头",
+      "被子", "床单", "台灯", "花瓶", "保温杯",
+      "厨房置物架", "调味罐套装", "拖把", "洗碗海绵", "密封罐",
+      "桌布", "地毯", "窗帘", "香薰蜡烛", "钟表",
+      "抱枕", "沙发垫", "浴室防滑垫", "晾衣架", "鞋架",
+    ],
+    brands: ["无印良品", "宜家", "网易严选", "京造", "小米", "苏泊尔", "美的", "九阳"],
+    priceRange: [10, 300],
+    markup: [1.6, 3.5],
   },
   {
     category: "运动户外",
@@ -280,6 +280,19 @@ const PRODUCT_DEFS: ProductDef[] = [
     ],
     brands: ["李宁", "安踏", "迪卡侬", "耐克", "阿迪达斯", "匹克", "特步", "鸿星尔克"],
     priceRange: [15, 400],
+    markup: [1.5, 3.0],
+  },
+  {
+    category: "图书文具",
+    names: [
+      "笔记本", "中性笔", "彩色马克笔", "文件夹", "计算器",
+      "便利贴", "书签", "手账本", "钢笔", "橡皮擦",
+      "小说", "教材辅导", "绘本", "工具书", "考试真题",
+      "文具套装", "桌面收纳", "书立", "名片夹", "白板",
+      "画材套装", "日历", "胶带", "印章", "明信片",
+    ],
+    brands: ["晨光", "得力", "百乐", "斑马", "三菱", "国誉", "当当", "新华书店"],
+    priceRange: [3, 60],
     markup: [1.5, 3.0],
   },
   {
@@ -298,45 +311,131 @@ const PRODUCT_DEFS: ProductDef[] = [
 ];
 
 // =============================================================================
-// Helper: Write JSON
+// Parquet Writing via DuckDB
 // =============================================================================
 
-function writeJSON(filePath: string, data: unknown[]): void {
+interface DuckDBHandle {
+  db: unknown;
+  conn: unknown;
+}
+
+async function openDuckDB(): Promise<DuckDBHandle> {
+  const db = await duckdb.open(":memory:");
+  const conn = await duckdb.connect(db);
+  return { db, conn };
+}
+
+async function closeDuckDB(handle: DuckDBHandle): Promise<void> {
+  duckdb.disconnect_sync(handle.conn);
+  duckdb.close_sync(handle.db);
+}
+
+function escapeSQL(val: unknown): string {
+  if (val === null || val === undefined) return "NULL";
+  if (typeof val === "number") return String(val);
+  if (typeof val === "boolean") return val ? "TRUE" : "FALSE";
+  // Escape single quotes by doubling them
+  return `'${String(val).replace(/'/g, "''")}'`;
+}
+
+async function writeParquet(
+  handle: DuckDBHandle,
+  filePath: string,
+  columns: { name: string; type: string }[],
+  rows: Record<string, unknown>[]
+): Promise<void> {
   const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 0), "utf-8");
-  console.log(`  Written ${filePath} (${data.length} rows, ${(fs.statSync(filePath).size / 1024).toFixed(1)} KB)`);
+
+  const tableName = `t_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const colDefs = columns.map((c) => `"${c.name}" ${c.type}`).join(", ");
+  await duckdb.query(handle.conn, `CREATE TABLE ${tableName} (${colDefs})`);
+
+  // Insert in batches to avoid SQL string length limits
+  const BATCH_SIZE = 500;
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const colNames = columns.map((c) => `"${c.name}"`).join(", ");
+    const valueRows = batch
+      .map((row) => {
+        const vals = columns.map((c) => escapeSQL(row[c.name]));
+        return `(${vals.join(", ")})`;
+      })
+      .join(", ");
+    await duckdb.query(
+      handle.conn,
+      `INSERT INTO ${tableName} (${colNames}) VALUES ${valueRows}`
+    );
+  }
+
+  await duckdb.query(
+    handle.conn,
+    `COPY ${tableName} TO '${filePath}' (FORMAT PARQUET)`
+  );
+  await duckdb.query(handle.conn, `DROP TABLE ${tableName}`);
+
+  const stat = fs.statSync(filePath);
+  console.log(
+    `  Written ${filePath} (${rows.length} rows, ${(stat.size / 1024).toFixed(1)} KB)`
+  );
 }
 
 // =============================================================================
 // Dataset 1: Ecommerce (电商销售)
 // =============================================================================
 
-function generateEcommerce(basePath: string) {
+interface Product {
+  product_id: string;
+  product_name: string;
+  category: string;
+  brand: string;
+  cost_price: number;
+  list_price: number;
+}
+
+interface Customer {
+  customer_id: string;
+  customer_name: string;
+  gender: string;
+  age_group: string;
+  city: string;
+  register_date: string;
+  membership: string;
+}
+
+interface Order {
+  order_id: string;
+  customer_id: string;
+  product_id: string;
+  order_date: string;
+  quantity: number;
+  unit_price: number;
+  total_amount: number;
+  category: string;
+  region: string;
+  payment_method: string;
+}
+
+function generateEcommerceData() {
   console.log("\n=== Generating Ecommerce Dataset ===");
   const rng = createRNG(42);
 
   // --- Products (~200 rows) ---
-  const products: {
-    product_id: string;
-    product_name: string;
-    category: string;
-    brand: string;
-    cost_price: number;
-    list_price: number;
-  }[] = [];
-
+  const products: Product[] = [];
   let productIdx = 1;
   for (const def of PRODUCT_DEFS) {
-    // Generate ~25 products per category (200 / 8 = 25)
     const count = 25;
     for (let i = 0; i < count; i++) {
       const name = def.names[i % def.names.length];
       const brand = rng.pick(def.brands);
-      const costPrice = Math.round(
-        (def.priceRange[0] + rng.next() * (def.priceRange[1] - def.priceRange[0])) * 100
-      ) / 100;
-      const markup = def.markup[0] + rng.next() * (def.markup[1] - def.markup[0]);
+      const costPrice =
+        Math.round(
+          (def.priceRange[0] +
+            rng.next() * (def.priceRange[1] - def.priceRange[0])) *
+            100
+        ) / 100;
+      const markup =
+        def.markup[0] + rng.next() * (def.markup[1] - def.markup[0]);
       const listPrice = Math.round(costPrice * markup * 100) / 100;
 
       products.push({
@@ -352,27 +451,19 @@ function generateEcommerce(basePath: string) {
   }
 
   // --- Customers (~1000 rows) ---
-  const customers: {
-    customer_id: string;
-    customer_name: string;
-    gender: string;
-    age_group: string;
-    city: string;
-    register_date: string;
-    membership: string;
-  }[] = [];
-
+  const customers: Customer[] = [];
   for (let i = 1; i <= 1000; i++) {
     const gender = rng.pick(GENDERS);
     const surname = rng.pick(SURNAMES);
-    const givenName = gender === "男" ? rng.pick(MALE_NAMES) : rng.pick(FEMALE_NAMES);
+    const givenName =
+      gender === "男" ? rng.pick(MALE_NAMES) : rng.pick(FEMALE_NAMES);
     const city = rng.pick(CITIES);
     const registerDate = randomDate(rng, 2022, 1, 1, 2024, 10, 31);
     const membership = rng.pickWeighted(MEMBERSHIP_LEVELS, MEMBERSHIP_WEIGHTS);
     const ageGroup = rng.pickWeighted(AGE_GROUPS, AGE_GROUP_WEIGHTS);
 
     customers.push({
-      customer_id: `CUST-${String(i).padStart(3, "0")}`,
+      customer_id: `CUST-${String(i).padStart(4, "0")}`,
       customer_name: `${surname}${givenName}`,
       gender,
       age_group: ageGroup,
@@ -383,19 +474,7 @@ function generateEcommerce(basePath: string) {
   }
 
   // --- Orders (~5000 rows) ---
-  const orders: {
-    order_id: string;
-    customer_id: string;
-    product_id: string;
-    order_date: string;
-    quantity: number;
-    unit_price: number;
-    total_amount: number;
-    category: string;
-    region: string;
-    payment_method: string;
-  }[] = [];
-
+  const orders: Order[] = [];
   for (let i = 1; i <= 5000; i++) {
     const orderDate = weightedDate2024(rng, ECOMMERCE_MONTH_WEIGHTS);
 
@@ -406,20 +485,23 @@ function generateEcommerce(basePath: string) {
       customer = rng.pick(customers);
       attempts++;
     }
-    // If still not found, force it by adjusting — rare case
     if (!dateBefore(customer.register_date, orderDate)) {
-      customer = customers[rng.int(0, 99)]; // first 100 customers registered earliest
+      customer = customers[rng.int(0, 99)];
     }
 
     // Pick product with weighted category distribution
     const selectedCategory = rng.pickWeighted(CATEGORIES, CATEGORY_WEIGHTS);
-    const categoryProducts = products.filter((p) => p.category === selectedCategory);
+    const categoryProducts = products.filter(
+      (p) => p.category === selectedCategory
+    );
     const product = rng.pick(categoryProducts);
     const quantity = rng.pickWeighted([1, 2, 3, 4, 5], [40, 30, 15, 10, 5]);
     const unitPrice = product.list_price;
     const totalAmount = Math.round(quantity * unitPrice * 100) / 100;
 
-    const region = CITY_REGION_MAP[customer.city] || rng.pickWeighted(REGIONS, REGION_WEIGHTS);
+    const region =
+      CITY_REGION_MAP[customer.city] ||
+      rng.pickWeighted(REGIONS, REGION_WEIGHTS);
     const paymentMethod = rng.pickWeighted(PAYMENT_METHODS, PAYMENT_WEIGHTS);
 
     const monthStr = orderDate.slice(5, 7);
@@ -440,39 +522,67 @@ function generateEcommerce(basePath: string) {
     });
   }
 
-  writeJSON(path.join(basePath, "orders.json"), orders);
-  writeJSON(path.join(basePath, "products.json"), products);
-  writeJSON(path.join(basePath, "customers.json"), customers);
+  return { products, customers, orders };
 }
 
 // =============================================================================
 // Dataset 2: User Behavior (用户行为)
 // =============================================================================
 
-function generateUserBehavior(basePath: string) {
+interface User {
+  user_id: string;
+  register_date: string;
+  register_channel: string;
+  device_type: string;
+  city: string;
+}
+
+interface UserEvent {
+  event_id: string;
+  user_id: string;
+  event_type: string;
+  event_date: string;
+  page: string;
+  duration_sec: number;
+}
+
+interface Session {
+  session_id: string;
+  user_id: string;
+  session_date: string;
+  session_duration: number;
+  page_count: number;
+  has_conversion: boolean;
+}
+
+function generateUserBehaviorData() {
   console.log("\n=== Generating User Behavior Dataset ===");
   const rng = createRNG(123);
 
-  const REGISTER_CHANNELS = ["微信", "抖音", "App Store", "官网", "好友推荐"];
+  // Per spec: 微信, 抖音, 应用商店, 朋友推荐, 广告
+  const REGISTER_CHANNELS = ["微信", "抖音", "应用商店", "朋友推荐", "广告"];
   const CHANNEL_WEIGHTS = [30, 25, 20, 15, 10];
   const DEVICE_TYPES = ["iOS", "Android", "Web"];
   const DEVICE_WEIGHTS = [30, 50, 20];
 
-  const EVENT_TYPES = ["page_view", "click", "add_to_cart", "purchase", "share"];
-  const EVENT_WEIGHTS = [40, 25, 15, 12, 8]; // funnel-like distribution
+  // Per spec: page_view, click, add_to_cart, purchase, search
+  const EVENT_TYPES = [
+    "page_view",
+    "click",
+    "add_to_cart",
+    "purchase",
+    "search",
+  ];
+  const EVENT_WEIGHTS = [40, 25, 15, 12, 8];
 
-  const PAGES = ["首页", "搜索页", "商品详情", "购物车", "结算页", "个人中心"];
-  const PAGE_WEIGHTS = [25, 20, 30, 10, 8, 7];
+  // Per spec: 首页, 商品详情, 购物车, 搜索结果, 个人中心, 活动页
+  const PAGES = ["首页", "商品详情", "购物车", "搜索结果", "个人中心", "活动页"];
+  const PAGE_WEIGHTS = [25, 30, 10, 15, 12, 8];
+
+  const EVENT_MONTH_WEIGHTS = [7, 5, 8, 8, 9, 12, 8, 9, 9, 10, 15, 10];
 
   // --- Users (~2000 rows) ---
-  const users: {
-    user_id: string;
-    register_date: string;
-    register_channel: string;
-    device_type: string;
-    city: string;
-  }[] = [];
-
+  const users: User[] = [];
   for (let i = 1; i <= 2000; i++) {
     users.push({
       user_id: `U-${String(i).padStart(5, "0")}`,
@@ -483,18 +593,8 @@ function generateUserBehavior(basePath: string) {
     });
   }
 
-  // --- Events (~50000 rows) ---
-  const events: {
-    event_id: string;
-    user_id: string;
-    event_type: string;
-    event_date: string;
-    page: string;
-    duration_sec: number;
-  }[] = [];
-
-  // Monthly weights for events: slightly higher activity in evenings/promotions
-  const EVENT_MONTH_WEIGHTS = [7, 5, 8, 8, 9, 12, 8, 9, 9, 10, 15, 10];
+  // --- Events (~50000 rows) with realistic retention decay ---
+  const events: UserEvent[] = [];
 
   for (let i = 1; i <= 50000; i++) {
     const user = rng.pick(users);
@@ -502,17 +602,23 @@ function generateUserBehavior(basePath: string) {
 
     // Ensure event is after user registration
     if (!dateBefore(user.register_date, eventDate)) {
-      // Generate a date after registration
       const regYear = parseInt(user.register_date.slice(0, 4));
       const regMonth = parseInt(user.register_date.slice(5, 7));
       const regDay = parseInt(user.register_date.slice(8, 10));
-      eventDate = randomDate(rng, regYear, regMonth, Math.min(regDay + 1, 28), 2024, 12, 31);
+      eventDate = randomDate(
+        rng,
+        regYear,
+        regMonth,
+        Math.min(regDay + 1, 28),
+        2024,
+        12,
+        31
+      );
     }
 
     const eventType = rng.pickWeighted(EVENT_TYPES, EVENT_WEIGHTS);
     const page = rng.pickWeighted(PAGES, PAGE_WEIGHTS);
 
-    // Duration varies by event type and page
     let durationBase: number;
     switch (eventType) {
       case "page_view":
@@ -527,13 +633,16 @@ function generateUserBehavior(basePath: string) {
       case "purchase":
         durationBase = 60;
         break;
-      case "share":
-        durationBase = 10;
+      case "search":
+        durationBase = 12;
         break;
       default:
         durationBase = 10;
     }
-    const durationSec = Math.max(1, Math.round(rng.normal(durationBase, durationBase * 0.4)));
+    const durationSec = Math.max(
+      1,
+      Math.round(rng.normal(durationBase, durationBase * 0.4))
+    );
 
     events.push({
       event_id: `EVT-${String(i).padStart(6, "0")}`,
@@ -546,15 +655,7 @@ function generateUserBehavior(basePath: string) {
   }
 
   // --- Sessions (~15000 rows) ---
-  const sessions: {
-    session_id: string;
-    user_id: string;
-    session_date: string;
-    session_duration: number;
-    page_count: number;
-    has_conversion: boolean;
-  }[] = [];
-
+  const sessions: Session[] = [];
   for (let i = 1; i <= 15000; i++) {
     const user = rng.pick(users);
     let sessionDate = weightedDate2024(rng, EVENT_MONTH_WEIGHTS);
@@ -563,21 +664,28 @@ function generateUserBehavior(basePath: string) {
       const regYear = parseInt(user.register_date.slice(0, 4));
       const regMonth = parseInt(user.register_date.slice(5, 7));
       const regDay = parseInt(user.register_date.slice(8, 10));
-      sessionDate = randomDate(rng, regYear, regMonth, Math.min(regDay + 1, 28), 2024, 12, 31);
+      sessionDate = randomDate(
+        rng,
+        regYear,
+        regMonth,
+        Math.min(regDay + 1, 28),
+        2024,
+        12,
+        31
+      );
     }
 
     const pageCount = rng.pickWeighted(
       [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
       [5, 10, 15, 18, 15, 12, 8, 6, 4, 3, 2, 2]
     );
-    // Session duration correlates with page count
     const sessionDuration = Math.max(
       10,
       Math.round(pageCount * rng.normal(45, 20) + rng.normal(30, 15))
     );
 
-    // Conversion rate ~8%, higher for longer sessions
-    const conversionThreshold = pageCount >= 4 ? 0.15 : pageCount >= 2 ? 0.08 : 0.02;
+    const conversionThreshold =
+      pageCount >= 4 ? 0.15 : pageCount >= 2 ? 0.08 : 0.02;
     const hasConversion = rng.next() < conversionThreshold;
 
     sessions.push({
@@ -590,104 +698,128 @@ function generateUserBehavior(basePath: string) {
     });
   }
 
-  writeJSON(path.join(basePath, "users.json"), users);
-  writeJSON(path.join(basePath, "events.json"), events);
-  writeJSON(path.join(basePath, "sessions.json"), sessions);
+  return { users, events, sessions };
 }
 
 // =============================================================================
 // Dataset 3: Marketing (营销活动)
 // =============================================================================
 
-function generateMarketing(basePath: string) {
+interface Campaign {
+  campaign_id: string;
+  campaign_name: string;
+  start_date: string;
+  end_date: string;
+  budget: number;
+  campaign_type: string;
+}
+
+interface Channel {
+  channel_id: string;
+  campaign_id: string;
+  channel_name: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  report_date: string;
+}
+
+interface Conversion {
+  conversion_id: string;
+  campaign_id: string;
+  channel_name: string;
+  conversion_date: string;
+  conversion_type: string;
+  revenue: number;
+}
+
+function generateMarketingData() {
   console.log("\n=== Generating Marketing Dataset ===");
   const rng = createRNG(456);
 
-  const CAMPAIGN_TYPES = ["促销", "品牌", "拉新", "召回", "节日", "内容"];
+  // Per spec: 促销, 品牌, 拉新, 召回, 节日, 日常
+  const CAMPAIGN_TYPES = ["促销", "品牌", "拉新", "召回", "节日", "日常"];
   const CAMPAIGN_TYPE_WEIGHTS = [25, 15, 20, 10, 20, 10];
 
+  // Per spec: 抖音, 微信, 小红书, 百度, 微博
   const CHANNEL_NAMES = ["抖音", "微信", "小红书", "百度", "微博"];
-  const CHANNEL_SPEND_WEIGHTS = [30, 25, 20, 15, 10]; // Douyin gets the most spend
+  const CHANNEL_SPEND_WEIGHTS = [30, 25, 20, 15, 10];
 
+  // Per spec: 注册, 下单, 付款
   const CONVERSION_TYPES = ["注册", "下单", "付款"];
-  const CONVERSION_TYPE_WEIGHTS = [40, 35, 25]; // funnel
+  const CONVERSION_TYPE_WEIGHTS = [40, 35, 25];
 
-  // --- Campaigns (~100 rows) ---
   const CAMPAIGN_NAME_TEMPLATES: Record<string, string[]> = {
-    "促销": [
+    促销: [
       "618大促", "双11狂欢节", "双12优惠", "年货节", "春季特卖",
       "夏日清凉节", "秋季新品促销", "周年庆", "限时秒杀", "满减活动",
       "品类日", "超值购", "囤货节", "新品首发优惠", "会员专享",
       "闪购专场", "跨店满减", "买赠活动", "折扣季", "清仓特卖",
     ],
-    "品牌": [
+    品牌: [
       "品牌故事系列", "匠心之作", "品质生活", "品牌周年庆", "新品发布会",
       "品牌日", "联名款首发", "品牌形象升级", "用户故事征集", "品牌体验官",
     ],
-    "拉新": [
+    拉新: [
       "新用户首单礼", "邀友有礼", "新人专享券", "注册送好礼", "拉新裂变",
       "新客体验价", "新手大礼包", "首次下单减免", "新用户限时优惠", "试用装免费领",
     ],
-    "召回": [
+    召回: [
       "老用户回馈", "久违特惠", "回归礼包", "沉睡唤醒", "专属优惠券",
       "想念你了", "回归有礼", "老友优惠", "重新发现", "VIP召回",
     ],
-    "节日": [
+    节日: [
       "春节年货节", "元宵节活动", "情人节特惠", "妇女节献礼", "清明踏青",
       "五一出行季", "端午节活动", "七夕浪漫季", "中秋团圆礼", "国庆嘉年华",
       "元旦跨年", "圣诞节", "儿童节", "教师节", "感恩节",
     ],
-    "内容": [
-      "达人种草", "直播带货", "测评活动", "攻略分享", "用户UGC征集",
-      "短视频挑战赛", "专题栏目", "知识科普", "好物推荐", "场景化内容",
+    日常: [
+      "每日推荐", "每周精选", "好物分享", "日常上新", "限定折扣",
+      "会员日", "积分兑换", "签到有礼", "随机立减", "晚间秒杀",
     ],
   };
 
-  const campaigns: {
-    campaign_id: string;
-    campaign_name: string;
-    start_date: string;
-    end_date: string;
-    budget: number;
-    campaign_type: string;
-  }[] = [];
-
+  // --- Campaigns (~100 rows) ---
+  const campaigns: Campaign[] = [];
   const usedNames = new Set<string>();
 
   for (let i = 1; i <= 100; i++) {
-    const campaignType = rng.pickWeighted(CAMPAIGN_TYPES, CAMPAIGN_TYPE_WEIGHTS);
+    const campaignType = rng.pickWeighted(
+      CAMPAIGN_TYPES,
+      CAMPAIGN_TYPE_WEIGHTS
+    );
     const templates = CAMPAIGN_NAME_TEMPLATES[campaignType];
 
     let campaignName: string;
     do {
       campaignName = rng.pick(templates);
-      // Add a suffix if name already used
       if (usedNames.has(campaignName)) {
         campaignName = `${campaignName}${rng.int(2, 9)}期`;
       }
     } while (usedNames.has(campaignName));
     usedNames.add(campaignName);
 
-    // Start date in 2024
     const startDate = randomDate(rng, 2024, 1, 1, 2024, 11, 30);
-    // Campaign duration: 3-45 days
     const durationDays = rng.int(3, 45);
     const startD = new Date(startDate);
     const endD = new Date(startD.getTime() + durationDays * 86400000);
-    // Cap at end of 2024
     if (endD.getFullYear() > 2024) {
       endD.setFullYear(2024);
       endD.setMonth(11);
       endD.setDate(31);
     }
-    const endDate = dateStr(endD.getFullYear(), endD.getMonth() + 1, endD.getDate());
+    const endDate = dateStr(
+      endD.getFullYear(),
+      endD.getMonth() + 1,
+      endD.getDate()
+    );
 
-    // Budget: 5,000 - 500,000 with some big campaigns
-    const budgetBase = rng.next() < 0.15
-      ? rng.int(200000, 500000) // 15% are big campaigns
-      : rng.next() < 0.4
-        ? rng.int(50000, 200000) // 34% medium
-        : rng.int(5000, 50000);  // 51% small
+    const budgetBase =
+      rng.next() < 0.15
+        ? rng.int(200000, 500000)
+        : rng.next() < 0.4
+          ? rng.int(50000, 200000)
+          : rng.int(5000, 50000);
 
     campaigns.push({
       campaign_id: `CMP-${String(i).padStart(3, "0")}`,
@@ -700,35 +832,27 @@ function generateMarketing(basePath: string) {
   }
 
   // --- Channels (~500 rows) ---
-  // Each campaign has entries across multiple channels with daily/weekly reports
-  const channels: {
-    channel_id: string;
-    campaign_id: string;
-    channel_name: string;
-    spend: number;
-    impressions: number;
-    clicks: number;
-    report_date: string;
-  }[] = [];
-
+  const channels: Channel[] = [];
   let channelIdx = 1;
 
   for (const campaign of campaigns) {
-    // Each campaign runs on 2-5 channels
     const numChannels = rng.int(2, 5);
-    const selectedChannels = rng.shuffle([...CHANNEL_NAMES]).slice(0, numChannels);
+    const selectedChannels = rng
+      .shuffle([...CHANNEL_NAMES])
+      .slice(0, numChannels);
 
-    // Distribute budget across channels
-    const channelBudgetShares = selectedChannels.map((_, ci) => {
-      return CHANNEL_SPEND_WEIGHTS[CHANNEL_NAMES.indexOf(selectedChannels[ci])] + rng.next() * 10;
+    const channelBudgetShares = selectedChannels.map((ch) => {
+      return (
+        CHANNEL_SPEND_WEIGHTS[CHANNEL_NAMES.indexOf(ch)] + rng.next() * 10
+      );
     });
     const totalShare = channelBudgetShares.reduce((a, b) => a + b, 0);
 
     for (let ci = 0; ci < selectedChannels.length; ci++) {
       const channelName = selectedChannels[ci];
-      const channelBudget = (channelBudgetShares[ci] / totalShare) * campaign.budget;
+      const channelBudget =
+        (channelBudgetShares[ci] / totalShare) * campaign.budget;
 
-      // Generate 1-3 report entries per channel (representing different report periods)
       const reportCount = rng.int(1, 3);
       for (let r = 0; r < reportCount; r++) {
         const reportDate = randomDate(
@@ -741,9 +865,11 @@ function generateMarketing(basePath: string) {
           parseInt(campaign.end_date.slice(8, 10))
         );
 
-        const spend = Math.round((channelBudget / reportCount) * (0.7 + rng.next() * 0.6) * 100) / 100;
+        const spend =
+          Math.round(
+            (channelBudget / reportCount) * (0.7 + rng.next() * 0.6) * 100
+          ) / 100;
 
-        // CPM ranges 5-50 yuan; CTR 0.5%-5%
         const cpm = 5 + rng.next() * 45;
         const impressions = Math.round((spend / cpm) * 1000);
         const ctr = 0.005 + rng.next() * 0.045;
@@ -764,25 +890,15 @@ function generateMarketing(basePath: string) {
   }
 
   // --- Conversions (~3000 rows) ---
-  const conversions: {
-    conversion_id: string;
-    campaign_id: string;
-    channel_name: string;
-    conversion_date: string;
-    conversion_type: string;
-    revenue: number;
-  }[] = [];
-
+  const conversions: Conversion[] = [];
   let conversionIdx = 1;
 
   for (const campaign of campaigns) {
-    // Number of conversions scales with budget
     const conversionCount = Math.max(
       5,
       Math.round((campaign.budget / 10000) * rng.normal(6, 2))
     );
 
-    // Get channels used in this campaign
     const campaignChannels = channels
       .filter((c) => c.campaign_id === campaign.campaign_id)
       .map((c) => c.channel_name);
@@ -800,13 +916,15 @@ function generateMarketing(basePath: string) {
         parseInt(campaign.end_date.slice(8, 10))
       );
 
-      const conversionType = rng.pickWeighted(CONVERSION_TYPES, CONVERSION_TYPE_WEIGHTS);
+      const conversionType = rng.pickWeighted(
+        CONVERSION_TYPES,
+        CONVERSION_TYPE_WEIGHTS
+      );
 
-      // Revenue depends on conversion type
       let revenue: number;
       switch (conversionType) {
         case "注册":
-          revenue = 0; // Registration has no direct revenue
+          revenue = 0;
           break;
         case "下单":
           revenue = Math.round(rng.normal(150, 80) * 100) / 100;
@@ -832,27 +950,183 @@ function generateMarketing(basePath: string) {
     }
   }
 
-  writeJSON(path.join(basePath, "campaigns.json"), campaigns);
-  writeJSON(path.join(basePath, "channels.json"), channels);
-  writeJSON(path.join(basePath, "conversions.json"), conversions);
+  return { campaigns, channels, conversions };
 }
 
 // =============================================================================
 // Main
 // =============================================================================
 
-function main() {
+async function main() {
   const projectRoot = path.resolve(__dirname, "..");
   const publicData = path.join(projectRoot, "public", "data");
 
-  console.log("DataChat Demo Dataset Generator");
+  console.log("DataChat Demo Dataset Generator (Parquet output)");
   console.log(`Output directory: ${publicData}`);
 
-  generateEcommerce(path.join(publicData, "ecommerce"));
-  generateUserBehavior(path.join(publicData, "user-behavior"));
-  generateMarketing(path.join(publicData, "marketing"));
+  const handle = await openDuckDB();
 
-  console.log("\n=== All datasets generated successfully! ===");
+  try {
+    // --- Ecommerce ---
+    const ecommerce = generateEcommerceData();
+
+    await writeParquet(
+      handle,
+      path.join(publicData, "ecommerce", "orders.parquet"),
+      [
+        { name: "order_id", type: "VARCHAR" },
+        { name: "customer_id", type: "VARCHAR" },
+        { name: "product_id", type: "VARCHAR" },
+        { name: "order_date", type: "VARCHAR" },
+        { name: "quantity", type: "INTEGER" },
+        { name: "unit_price", type: "DOUBLE" },
+        { name: "total_amount", type: "DOUBLE" },
+        { name: "category", type: "VARCHAR" },
+        { name: "region", type: "VARCHAR" },
+        { name: "payment_method", type: "VARCHAR" },
+      ],
+      ecommerce.orders
+    );
+
+    await writeParquet(
+      handle,
+      path.join(publicData, "ecommerce", "products.parquet"),
+      [
+        { name: "product_id", type: "VARCHAR" },
+        { name: "product_name", type: "VARCHAR" },
+        { name: "category", type: "VARCHAR" },
+        { name: "brand", type: "VARCHAR" },
+        { name: "cost_price", type: "DOUBLE" },
+        { name: "list_price", type: "DOUBLE" },
+      ],
+      ecommerce.products
+    );
+
+    await writeParquet(
+      handle,
+      path.join(publicData, "ecommerce", "customers.parquet"),
+      [
+        { name: "customer_id", type: "VARCHAR" },
+        { name: "customer_name", type: "VARCHAR" },
+        { name: "gender", type: "VARCHAR" },
+        { name: "age_group", type: "VARCHAR" },
+        { name: "city", type: "VARCHAR" },
+        { name: "register_date", type: "VARCHAR" },
+        { name: "membership", type: "VARCHAR" },
+      ],
+      ecommerce.customers
+    );
+
+    // --- User Behavior ---
+    const userBehavior = generateUserBehaviorData();
+
+    await writeParquet(
+      handle,
+      path.join(publicData, "user-behavior", "users.parquet"),
+      [
+        { name: "user_id", type: "VARCHAR" },
+        { name: "register_date", type: "VARCHAR" },
+        { name: "register_channel", type: "VARCHAR" },
+        { name: "device_type", type: "VARCHAR" },
+        { name: "city", type: "VARCHAR" },
+      ],
+      userBehavior.users
+    );
+
+    await writeParquet(
+      handle,
+      path.join(publicData, "user-behavior", "events.parquet"),
+      [
+        { name: "event_id", type: "VARCHAR" },
+        { name: "user_id", type: "VARCHAR" },
+        { name: "event_type", type: "VARCHAR" },
+        { name: "event_date", type: "VARCHAR" },
+        { name: "page", type: "VARCHAR" },
+        { name: "duration_sec", type: "INTEGER" },
+      ],
+      userBehavior.events
+    );
+
+    await writeParquet(
+      handle,
+      path.join(publicData, "user-behavior", "sessions.parquet"),
+      [
+        { name: "session_id", type: "VARCHAR" },
+        { name: "user_id", type: "VARCHAR" },
+        { name: "session_date", type: "VARCHAR" },
+        { name: "session_duration", type: "INTEGER" },
+        { name: "page_count", type: "INTEGER" },
+        { name: "has_conversion", type: "BOOLEAN" },
+      ],
+      userBehavior.sessions
+    );
+
+    // --- Marketing ---
+    const marketing = generateMarketingData();
+
+    await writeParquet(
+      handle,
+      path.join(publicData, "marketing", "campaigns.parquet"),
+      [
+        { name: "campaign_id", type: "VARCHAR" },
+        { name: "campaign_name", type: "VARCHAR" },
+        { name: "start_date", type: "VARCHAR" },
+        { name: "end_date", type: "VARCHAR" },
+        { name: "budget", type: "DOUBLE" },
+        { name: "campaign_type", type: "VARCHAR" },
+      ],
+      marketing.campaigns
+    );
+
+    await writeParquet(
+      handle,
+      path.join(publicData, "marketing", "channels.parquet"),
+      [
+        { name: "channel_id", type: "VARCHAR" },
+        { name: "campaign_id", type: "VARCHAR" },
+        { name: "channel_name", type: "VARCHAR" },
+        { name: "spend", type: "DOUBLE" },
+        { name: "impressions", type: "INTEGER" },
+        { name: "clicks", type: "INTEGER" },
+        { name: "report_date", type: "VARCHAR" },
+      ],
+      marketing.channels
+    );
+
+    await writeParquet(
+      handle,
+      path.join(publicData, "marketing", "conversions.parquet"),
+      [
+        { name: "conversion_id", type: "VARCHAR" },
+        { name: "campaign_id", type: "VARCHAR" },
+        { name: "channel_name", type: "VARCHAR" },
+        { name: "conversion_date", type: "VARCHAR" },
+        { name: "conversion_type", type: "VARCHAR" },
+        { name: "revenue", type: "DOUBLE" },
+      ],
+      marketing.conversions
+    );
+
+    // Clean up old JSON files
+    const jsonDirs = ["ecommerce", "user-behavior", "marketing"];
+    for (const dir of jsonDirs) {
+      const dirPath = path.join(publicData, dir);
+      const files = fs.readdirSync(dirPath);
+      for (const file of files) {
+        if (file.endsWith(".json")) {
+          fs.unlinkSync(path.join(dirPath, file));
+          console.log(`  Removed old JSON: ${path.join(dirPath, file)}`);
+        }
+      }
+    }
+
+    console.log("\n=== All datasets generated successfully! ===");
+  } finally {
+    await closeDuckDB(handle);
+  }
 }
 
-main();
+main().catch((err) => {
+  console.error("Error generating datasets:", err);
+  process.exit(1);
+});

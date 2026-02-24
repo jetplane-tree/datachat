@@ -62,3 +62,30 @@ export async function loadJsonData(
     `CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM read_json_auto('${fileName}')`
   );
 }
+
+export async function loadParquetData(
+  tableName: string,
+  url: string
+): Promise<void> {
+  const database = await initDuckDB();
+  const connection = await getConnection();
+
+  const response = await fetch(url);
+  const buffer = await response.arrayBuffer();
+  const fileName = `${tableName}.parquet`;
+  await database.registerFileBuffer(fileName, new Uint8Array(buffer));
+  await connection.query(
+    `CREATE OR REPLACE TABLE ${tableName} AS SELECT * FROM read_parquet('${fileName}')`
+  );
+}
+
+export async function loadData(
+  tableName: string,
+  url: string
+): Promise<void> {
+  if (url.endsWith(".parquet")) {
+    await loadParquetData(tableName, url);
+  } else {
+    await loadJsonData(tableName, url);
+  }
+}

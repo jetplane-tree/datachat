@@ -61,9 +61,9 @@ export const datasets: Dataset[] = [
       "客单价最高的前10个客户是谁？",
     ],
     dataFiles: {
-      orders: "/data/ecommerce/orders.json",
-      products: "/data/ecommerce/products.json",
-      customers: "/data/ecommerce/customers.json",
+      orders: "/data/ecommerce/orders.parquet",
+      products: "/data/ecommerce/products.parquet",
+      customers: "/data/ecommerce/customers.parquet",
     },
   },
   {
@@ -120,9 +120,9 @@ export const datasets: Dataset[] = [
       "iOS和Android用户的行为有什么差异？",
     ],
     dataFiles: {
-      users: "/data/user-behavior/users.json",
-      events: "/data/user-behavior/events.json",
-      sessions: "/data/user-behavior/sessions.json",
+      users: "/data/user-behavior/users.parquet",
+      events: "/data/user-behavior/events.parquet",
+      sessions: "/data/user-behavior/sessions.parquet",
     },
   },
   {
@@ -181,9 +181,9 @@ export const datasets: Dataset[] = [
       "不同活动类型的平均获客成本是多少？",
     ],
     dataFiles: {
-      campaigns: "/data/marketing/campaigns.json",
-      channels: "/data/marketing/channels.json",
-      conversions: "/data/marketing/conversions.json",
+      campaigns: "/data/marketing/campaigns.parquet",
+      channels: "/data/marketing/channels.parquet",
+      conversions: "/data/marketing/conversions.parquet",
     },
   },
 ];
