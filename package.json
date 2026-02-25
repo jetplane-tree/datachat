@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "generate-data": "tsx scripts/generate-datasets.ts"
+    "generate-data": "tsx scripts/generate-datasets.ts",
+    "seed-turso": "tsx scripts/seed-turso.ts"
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "^1.31.0",
@@ -31,6 +32,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.3.1",
     "eslint": "^9",
     "eslint-config-next": "^15.5.12",
     "shadcn": "^3.8.5",
