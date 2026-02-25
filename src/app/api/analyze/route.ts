@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "system",
-          content: "你是一个专业的数据分析助手，只返回 JSON 格式的分析结果。",
+          content: "你是一个资深数据分析师，精通 SQLite SQL 和数据可视化。你的任务是根据用户问题生成准确的 SQL、选择最佳图表类型、并给出有洞察力的分析。严格只返回 JSON，不要包含任何其他文本。",
         },
         {
           role: "user",
@@ -168,13 +168,14 @@ export async function POST(request: NextRequest) {
         const retryPrompt = buildAnalysisPrompt(
           schemaInfo,
           `之前生成的 SQL 执行失败，错误信息: "${sqlErrMsg}"。原始SQL: ${sql}。请修正 SQL 并重新回答原始问题: ${question}`,
-          conversationHistory
+          conversationHistory,
+          customInstructions
         );
 
         const retryCompletion = await client.chat.completions.create({
           model,
           messages: [
-            { role: "system", content: "你是一个专业的数据分析助手，只返回 JSON 格式的分析结果。" },
+            { role: "system", content: "你是一个资深数据分析师，精通 SQLite SQL 和数据可视化。你的任务是根据用户问题生成准确的 SQL、选择最佳图表类型、并给出有洞察力的分析。严格只返回 JSON，不要包含任何其他文本。" },
             { role: "user", content: retryPrompt },
           ],
           temperature: 0.1,

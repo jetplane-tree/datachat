@@ -3,17 +3,22 @@
 import { useState, useRef, KeyboardEvent } from "react";
 import { ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CustomInstructions } from "@/components/analyze/custom-instructions";
 
 interface QueryInputProps {
   onSubmit: (question: string) => void;
   presetQuestions: string[];
   disabled?: boolean;
+  customInstructions?: string;
+  onCustomInstructionsChange?: (value: string) => void;
 }
 
 export function QueryInput({
   onSubmit,
   presetQuestions,
   disabled = false,
+  customInstructions,
+  onCustomInstructionsChange,
 }: QueryInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -88,6 +93,16 @@ export function QueryInput({
           <ArrowUp className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Custom instructions */}
+      {onCustomInstructionsChange && (
+        <div className="mt-1.5 flex items-center">
+          <CustomInstructions
+            value={customInstructions || ""}
+            onChange={onCustomInstructionsChange}
+          />
+        </div>
+      )}
     </div>
   );
 }
