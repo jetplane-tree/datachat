@@ -3,22 +3,21 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getDatasetById } from "@/lib/dataset-registry";
-import { useDuckDB } from "@/hooks/use-duckdb";
 import { Header } from "@/components/layout/header";
 import { DataSidebar } from "@/components/analyze/data-sidebar";
 import { QueryInput } from "@/components/analyze/query-input";
 import { AnalysisList } from "@/components/analyze/analysis-list";
-import { Database, Loader2, Trash2 } from "lucide-react";
+import { Database, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccessGate, useAccessCode } from "@/components/access-gate";
-import { Message, AnalysisResult, QueryResult } from "@/types";
+import { Message, AnalysisResult } from "@/types";
 
 export default function AnalyzePage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const router = useRouter();
   const dataset = getDatasetById(datasetId);
-  const { isLoading, isReady, error, loadingStage, loadDataset, runQuery } = useDuckDB();
   const { code: accessCode, loaded: codeLoaded, saveCode, clearCode } = useAccessCode();
+  const [isReady] = useState(true); // No loading needed — data is server-side
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeStage, setAnalyzeStage] = useState("");
@@ -28,8 +27,7 @@ export default function AnalyzePage() {
       router.replace("/");
       return;
     }
-    loadDataset(dataset);
-  }, [dataset, loadDataset, router]);
+  }, [dataset, router]);
 
   const handleClearConversation = useCallback(() => {
     setMessages([]);
@@ -37,7 +35,7 @@ export default function AnalyzePage() {
 
   const handleSubmit = useCallback(
     async (question: string) => {
-      if (!dataset || !isReady || isAnalyzing) return;
+      if (!dataset || isAnalyzing) return;
 
       const userMessage: Message = {
         id: `msg-${Date.now()}`,
@@ -56,10 +54,9 @@ export default function AnalyzePage() {
 
       setMessages((prev) => [...prev, userMessage, placeholderMessage]);
       setIsAnalyzing(true);
-      setAnalyzeStage("AI 正在理解你的问题...");
+      setAnalyzeStage("AI 正在分析你的问题...");
 
       try {
-        // Call LLM API
         const res = await fetch("/api/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -87,64 +84,18 @@ export default function AnalyzePage() {
           insight: data.insight,
         };
 
-        // Execute SQL via DuckDB — with auto-retry
-        setAnalyzeStage("正在执行数据查询...");
-        let queryResult: QueryResult;
-        try {
-          queryResult = await runQuery(analysis.sql);
-        } catch (sqlErr) {
-          const sqlErrMsg =
-            sqlErr instanceof Error ? sqlErr.message : "未知错误";
-
-          // Auto-retry: send error back to LLM for a corrected SQL
-          try {
-            setAnalyzeStage("SQL 出错，正在自动修正...");
-            const retryRes = await fetch("/api/analyze", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                question: `之前生成的 SQL 执行失败，错误信息: "${sqlErrMsg}"。原始SQL: ${analysis.sql}。请修正 SQL 并重新回答原始问题: ${question}`,
-                datasetId: dataset.id,
-                conversationHistory: messages.slice(-6),
-                accessCode,
-              }),
-            });
-
-            const retryData = await retryRes.json();
-
-            if (retryRes.ok && retryData.sql) {
-              analysis.sql = retryData.sql;
-              analysis.chart = retryData.chart || analysis.chart;
-              analysis.insight = retryData.insight || analysis.insight;
-              queryResult = await runQuery(retryData.sql);
-            } else {
-              throw new Error(sqlErrMsg);
-            }
-          } catch {
-            throw new Error(`SQL 执行失败: ${sqlErrMsg}`);
-          }
-        }
-
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? {
-                  ...m,
-                  content: analysis.insight,
-                  analysis,
-                  queryResult,
-                }
+              ? { ...m, content: analysis.insight, analysis, queryResult: data.queryResult }
               : m
           )
         );
       } catch (err) {
-        const errMsg =
-          err instanceof Error ? err.message : "分析失败，请重试";
+        const errMsg = err instanceof Error ? err.message : "分析失败，请重试";
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId
-              ? { ...m, content: errMsg, error: errMsg }
-              : m
+            m.id === assistantId ? { ...m, content: errMsg, error: errMsg } : m
           )
         );
       } finally {
@@ -152,7 +103,7 @@ export default function AnalyzePage() {
         setAnalyzeStage("");
       }
     },
-    [dataset, isReady, isAnalyzing, messages, runQuery, accessCode, clearCode]
+    [dataset, isAnalyzing, messages, accessCode, clearCode]
   );
 
   // Retry handler for error cards
@@ -196,36 +147,6 @@ export default function AnalyzePage() {
 
         {/* Main area */}
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Loading state */}
-          {isLoading && (
-            <div className="flex flex-1 flex-col items-center justify-center gap-5 text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-              {loadingStage && (
-                <div className="flex w-64 flex-col items-center gap-3">
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-100">
-                    <div
-                      className="h-full rounded-full bg-indigo-500 transition-all duration-500 ease-out"
-                      style={{
-                        width: `${(loadingStage.step / loadingStage.totalSteps) * 100}%`,
-                      }}
-                    />
-                  </div>
-                  <p className="text-sm">{loadingStage.label}</p>
-                  <p className="text-xs text-muted-foreground/60">
-                    {loadingStage.step} / {loadingStage.totalSteps}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Error state */}
-          {error && (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-destructive">
-              <p className="text-sm">{error}</p>
-            </div>
-          )}
-
           {/* Ready state */}
           {isReady && (
             <>
