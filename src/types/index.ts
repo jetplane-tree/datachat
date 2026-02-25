@@ -18,9 +18,8 @@ export interface Dataset {
   name: string;
   description: string;
   icon: string;
-  tables: DatasetTable[];
+  tableNames: string[];
   presetQuestions: string[];
-  dataFiles: Record<string, string>;
 }
 
 // LLM response

@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronRight, Table2, Database } from "lucide-react";
-import { Dataset, DatasetTable } from "@/types";
+import { DatasetTable } from "@/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
 interface DataSidebarProps {
-  dataset: Dataset;
+  datasetName: string;
+  tables: DatasetTable[];
 }
 
 function TableSection({ table }: { table: DatasetTable }) {
@@ -49,19 +50,19 @@ function TableSection({ table }: { table: DatasetTable }) {
   );
 }
 
-export function DataSidebar({ dataset }: DataSidebarProps) {
+export function DataSidebar({ datasetName, tables }: DataSidebarProps) {
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border/40 bg-muted/20">
       <div className="flex items-center gap-2 px-4 py-3">
         <Database className="h-4 w-4 text-indigo-500" />
         <h2 className="text-sm font-semibold text-foreground">
-          {dataset.name}
+          {datasetName}
         </h2>
       </div>
       <Separator />
       <ScrollArea className="flex-1 px-3 py-2">
         <div className="space-y-1">
-          {dataset.tables.map((table) => (
+          {tables.map((table) => (
             <TableSection key={table.name} table={table} />
           ))}
         </div>

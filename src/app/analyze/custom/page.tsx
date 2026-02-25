@@ -6,7 +6,7 @@ import { DataSidebar } from "@/components/analyze/data-sidebar";
 import { QueryInput } from "@/components/analyze/query-input";
 import { AnalysisList } from "@/components/analyze/analysis-list";
 import { parseFile, generatePresetQuestions } from "@/lib/file-parser";
-import { getSchemaPrompt } from "@/lib/dataset-registry";
+import { buildSchemaPrompt } from "@/lib/schema-prompt";
 import {
   Upload,
   FileSpreadsheet,
@@ -16,16 +16,19 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccessGate, useAccessCode } from "@/components/access-gate";
-import { Dataset, Message, AnalysisResult, QueryResult } from "@/types";
+import { useCustomInstructions } from "@/components/analyze/custom-instructions";
+import { Dataset, DatasetTable, Message, AnalysisResult, QueryResult } from "@/types";
 
 const TABLE_NAME = "uploaded_data";
 const MAX_FILE_SIZE_WARNING = 10 * 1024 * 1024; // 10MB
 
 export default function CustomAnalyzePage() {
   const { code: accessCode, loaded: codeLoaded, saveCode, clearCode } = useAccessCode();
+  const { instructions: customInstructions, save: saveInstructions } = useCustomInstructions();
   const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [dataset, setDataset] = useState<Dataset | null>(null);
+  const [customTables, setCustomTables] = useState<DatasetTable[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -80,21 +83,21 @@ export default function CustomAnalyzePage() {
 
         // Build a temporary Dataset object
         const presetQuestions = generatePresetQuestions(columns);
+        const table: DatasetTable = {
+          name: TABLE_NAME,
+          description: `从 ${file.name} 导入的数据`,
+          columns,
+          rowCount: rows.length,
+        };
+        setCustomTables([table]);
+
         const customDataset: Dataset = {
           id: "custom",
           name: file.name,
           description: `上传的文件，共 ${rows.length} 行，${columns.length} 列`,
           icon: "FileSpreadsheet",
-          tables: [
-            {
-              name: TABLE_NAME,
-              description: `从 ${file.name} 导入的数据`,
-              columns,
-              rowCount: rows.length,
-            },
-          ],
+          tableNames: [TABLE_NAME],
           presetQuestions,
-          dataFiles: {},
         };
 
         setDataset(customDataset);
@@ -170,7 +173,7 @@ export default function CustomAnalyzePage() {
 
       try {
         // Build schema info for the custom dataset
-        const schemaInfo = getSchemaPrompt(dataset);
+        const schemaInfo = buildSchemaPrompt(dataset.name, customTables);
 
         // Call LLM API with schemaInfo passed directly
         const res = await fetch("/api/analyze", {
@@ -182,6 +185,7 @@ export default function CustomAnalyzePage() {
             schemaInfo,
             conversationHistory: messages.slice(-6),
             accessCode,
+            customInstructions: customInstructions || undefined,
           }),
         });
 
@@ -222,7 +226,7 @@ export default function CustomAnalyzePage() {
         setIsAnalyzing(false);
       }
     },
-    [dataset, isAnalyzing, messages, accessCode, clearCode]
+    [dataset, customTables, isAnalyzing, messages, accessCode, clearCode, customInstructions]
   );
 
   // Retry handler for error cards
@@ -357,7 +361,7 @@ export default function CustomAnalyzePage() {
       <Header />
       <div className="flex min-h-0 flex-1">
         {/* Sidebar */}
-        {dataset && <DataSidebar dataset={dataset} />}
+        {dataset && <DataSidebar datasetName={dataset.name} tables={customTables} />}
 
         {/* Main area */}
         <div className="flex min-w-0 flex-1 flex-col">
@@ -411,6 +415,8 @@ export default function CustomAnalyzePage() {
                   messages.length === 0 ? dataset.presetQuestions : []
                 }
                 disabled={isAnalyzing || !isReady}
+                customInstructions={customInstructions}
+                onCustomInstructionsChange={saveInstructions}
               />
             </>
           )}

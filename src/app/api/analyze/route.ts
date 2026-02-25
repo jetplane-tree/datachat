@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { getDatasetById, getSchemaPrompt } from "@/lib/dataset-registry";
+import { getDatasetById } from "@/lib/dataset-registry";
 import { buildAnalysisPrompt } from "@/lib/llm-prompt";
-import { executeQuery } from "@/lib/turso";
+import { executeQuery, getDatasetSchema, buildSchemaPrompt } from "@/lib/turso";
 import { Message } from "@/types";
 
 const client = new OpenAI({
@@ -78,11 +78,13 @@ export async function POST(request: NextRequest) {
       datasetId,
       schemaInfo: customSchemaInfo,
       conversationHistory = [],
+      customInstructions,
     }: {
       question: string;
       datasetId: string;
       schemaInfo?: string;
       conversationHistory: Message[];
+      customInstructions?: string;
     } = body;
 
     if (!question || !datasetId) {
@@ -105,9 +107,10 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         );
       }
-      schemaInfo = getSchemaPrompt(dataset);
+      const tables = await getDatasetSchema(dataset.tableNames);
+      schemaInfo = buildSchemaPrompt(dataset.name, tables);
     }
-    const prompt = buildAnalysisPrompt(schemaInfo, question, conversationHistory);
+    const prompt = buildAnalysisPrompt(schemaInfo, question, conversationHistory, customInstructions);
 
     const completion = await client.chat.completions.create({
       model,

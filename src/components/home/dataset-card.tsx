@@ -16,8 +16,7 @@ interface DatasetCardProps {
 
 export function DatasetCard({ dataset }: DatasetCardProps) {
   const Icon = iconMap[dataset.icon] || Database;
-  const tableCount = dataset.tables.length;
-  const totalRows = dataset.tables.reduce((sum, t) => sum + t.rowCount, 0);
+  const tableCount = dataset.tableNames.length;
 
   return (
     <Link href={`/analyze/${dataset.id}`}>
@@ -41,8 +40,6 @@ export function DatasetCard({ dataset }: DatasetCardProps) {
             </p>
             <div className="mt-3 flex items-center gap-3 text-[11px] text-stone-400">
               <span>{tableCount} 张表</span>
-              <span className="h-0.5 w-0.5 rounded-full bg-stone-300" />
-              <span>{totalRows.toLocaleString()} 行数据</span>
             </div>
           </div>
         </div>

@@ -7,17 +7,20 @@ import { Header } from "@/components/layout/header";
 import { DataSidebar } from "@/components/analyze/data-sidebar";
 import { QueryInput } from "@/components/analyze/query-input";
 import { AnalysisList } from "@/components/analyze/analysis-list";
-import { Database, Trash2 } from "lucide-react";
+import { Database, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccessGate, useAccessCode } from "@/components/access-gate";
-import { Message, AnalysisResult, QueryResult } from "@/types";
+import { useCustomInstructions } from "@/components/analyze/custom-instructions";
+import { Message, AnalysisResult, QueryResult, DatasetTable } from "@/types";
 
 export default function AnalyzePage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const router = useRouter();
   const dataset = getDatasetById(datasetId);
   const { code: accessCode, loaded: codeLoaded, saveCode, clearCode } = useAccessCode();
-  const [isReady] = useState(true); // No loading needed — data is server-side
+  const { instructions: customInstructions, save: saveInstructions } = useCustomInstructions();
+  const [tables, setTables] = useState<DatasetTable[]>([]);
+  const [schemaLoading, setSchemaLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzeStage, setAnalyzeStage] = useState("");
@@ -27,7 +30,22 @@ export default function AnalyzePage() {
       router.replace("/");
       return;
     }
-  }, [dataset, router]);
+
+    async function fetchSchema() {
+      try {
+        const res = await fetch(`/api/schema?datasetId=${datasetId}`);
+        const data = await res.json();
+        if (res.ok && data.tables) {
+          setTables(data.tables);
+        }
+      } catch {
+        // Schema fetch failed — sidebar will just be empty
+      } finally {
+        setSchemaLoading(false);
+      }
+    }
+    fetchSchema();
+  }, [dataset, datasetId, router]);
 
   const handleClearConversation = useCallback(() => {
     setMessages([]);
@@ -65,6 +83,7 @@ export default function AnalyzePage() {
             datasetId: dataset.id,
             conversationHistory: messages.slice(-6),
             accessCode,
+            customInstructions: customInstructions || undefined,
           }),
         });
 
@@ -103,7 +122,7 @@ export default function AnalyzePage() {
         setAnalyzeStage("");
       }
     },
-    [dataset, isAnalyzing, messages, accessCode, clearCode]
+    [dataset, isAnalyzing, messages, accessCode, clearCode, customInstructions]
   );
 
   // Retry handler for error cards
@@ -160,57 +179,62 @@ export default function AnalyzePage() {
       <Header />
       <div className="flex min-h-0 flex-1">
         {/* Sidebar */}
-        <DataSidebar dataset={dataset} />
+        {schemaLoading ? (
+          <aside className="flex h-full w-64 shrink-0 items-center justify-center border-r border-border/40 bg-muted/20">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </aside>
+        ) : (
+          <DataSidebar datasetName={dataset.name} tables={tables} />
+        )}
 
         {/* Main area */}
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Ready state */}
-          {isReady && (
-            <>
-              {/* Toolbar - clear conversation */}
-              {messages.length > 0 && (
-                <div className="flex items-center justify-end border-b border-border/30 px-4 py-1.5">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearConversation}
-                    className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    清空对话
-                  </Button>
-                </div>
-              )}
-
-              {/* Analysis results area */}
-              <div className="flex-1 overflow-hidden">
-                {messages.length === 0 ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-                    <Database className="h-10 w-10 text-muted-foreground/30" />
-                    <p className="text-sm">输入问题开始分析</p>
-                  </div>
-                ) : (
-                  <AnalysisList
-                    messages={messages}
-                    isAnalyzing={isAnalyzing}
-                    analyzeStage={analyzeStage}
-                    onRetry={handleRetry}
-                    onUpdateResult={handleUpdateResult}
-                    accessCode={accessCode}
-                  />
-                )}
+          <>
+            {/* Toolbar - clear conversation */}
+            {messages.length > 0 && (
+              <div className="flex items-center justify-end border-b border-border/30 px-4 py-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearConversation}
+                  className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  清空对话
+                </Button>
               </div>
+            )}
 
-              {/* Input bar */}
-              <QueryInput
-                onSubmit={handleSubmit}
-                presetQuestions={
-                  messages.length === 0 ? dataset.presetQuestions : []
-                }
-                disabled={isAnalyzing || !isReady}
-              />
-            </>
-          )}
+            {/* Analysis results area */}
+            <div className="flex-1 overflow-hidden">
+              {messages.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+                  <Database className="h-10 w-10 text-muted-foreground/30" />
+                  <p className="text-sm">输入问题开始分析</p>
+                </div>
+              ) : (
+                <AnalysisList
+                  messages={messages}
+                  isAnalyzing={isAnalyzing}
+                  analyzeStage={analyzeStage}
+                  onRetry={handleRetry}
+                  onUpdateResult={handleUpdateResult}
+                  accessCode={accessCode}
+                />
+              )}
+            </div>
+
+            {/* Input bar */}
+            <QueryInput
+              onSubmit={handleSubmit}
+              presetQuestions={
+                messages.length === 0 ? dataset.presetQuestions : []
+              }
+              disabled={isAnalyzing}
+              customInstructions={customInstructions}
+              onCustomInstructionsChange={saveInstructions}
+            />
+          </>
         </div>
       </div>
     </div>
