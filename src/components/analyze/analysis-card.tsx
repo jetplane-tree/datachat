@@ -92,6 +92,9 @@ export function AnalysisCard({
 
   const { analysis, queryResult, error } = assistantMessage;
 
+  const effectiveChartType = overrideChartType || analysis?.chart?.type;
+  const isTableMode = effectiveChartType === "table";
+
   const handleCopySQL = async () => {
     if (!analysis?.sql) return;
     await navigator.clipboard.writeText(analysis.sql);
@@ -189,48 +192,69 @@ export function AnalysisCard({
       {/* Analysis results */}
       {analysis && !error && (
         <div className="space-y-0">
-          {/* Chart */}
-          <div className="px-5 pt-4 pb-2">
-            {queryResult && queryResult.rows.length > 0 ? (
-              <div className="relative">
-                {/* Chart type switcher */}
-                <div className="absolute right-0 top-0 z-10">
-                  <select
-                    value={overrideChartType || analysis.chart.type}
-                    onChange={(e) => setOverrideChartType(e.target.value)}
-                    className="rounded-md border border-border/50 bg-background px-2 py-1 text-[10px] text-muted-foreground outline-none hover:border-border focus:ring-1 focus:ring-indigo-500/50"
-                  >
-                    <option value="bar">柱状图</option>
-                    <option value="line">折线图</option>
-                    <option value="pie">饼图</option>
-                    <option value="scatter">散点图</option>
-                    <option value="funnel">漏斗图</option>
-                  </select>
+          {/* Chart (hidden in table mode) */}
+          {!isTableMode && (
+            <div className="px-5 pt-4 pb-2">
+              {queryResult && queryResult.rows.length > 0 ? (
+                <div className="relative">
+                  {/* Chart type switcher */}
+                  <div className="absolute right-0 top-0 z-10">
+                    <select
+                      value={effectiveChartType || "bar"}
+                      onChange={(e) => setOverrideChartType(e.target.value)}
+                      className="rounded-md border border-border/50 bg-background px-2 py-1 text-[10px] text-muted-foreground outline-none hover:border-border focus:ring-1 focus:ring-indigo-500/50"
+                    >
+                      <option value="bar">柱状图</option>
+                      <option value="line">折线图</option>
+                      <option value="pie">饼图</option>
+                      <option value="scatter">散点图</option>
+                      <option value="funnel">漏斗图</option>
+                      <option value="table">仅表格</option>
+                    </select>
+                  </div>
+                  <ChartRenderer
+                    chartConfig={{
+                      ...analysis.chart,
+                      type: (effectiveChartType || analysis.chart.type) as ChartConfig["type"],
+                    }}
+                    queryResult={queryResult}
+                  />
                 </div>
-                <ChartRenderer
-                  chartConfig={{
-                    ...analysis.chart,
-                    type: (overrideChartType || analysis.chart.type) as ChartConfig["type"],
-                  }}
-                  queryResult={queryResult}
-                />
-              </div>
-            ) : (
-              <div className="flex h-48 items-center justify-center rounded-lg bg-muted/30">
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                  <BarChart3 className="h-8 w-8 text-muted-foreground/40" />
-                  <span className="text-xs">
-                    未找到匹配数据，试试换个问法
-                  </span>
+              ) : (
+                <div className="flex h-48 items-center justify-center rounded-lg bg-muted/30">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <BarChart3 className="h-8 w-8 text-muted-foreground/40" />
+                    <span className="text-xs">
+                      未找到匹配数据，试试换个问法
+                    </span>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
+
+          {/* Table mode header with switcher */}
+          {isTableMode && queryResult && queryResult.rows.length > 0 && (
+            <div className="flex items-center justify-end px-5 pt-3">
+              <select
+                value="table"
+                onChange={(e) => setOverrideChartType(e.target.value)}
+                className="rounded-md border border-border/50 bg-background px-2 py-1 text-[10px] text-muted-foreground outline-none hover:border-border focus:ring-1 focus:ring-indigo-500/50"
+              >
+                <option value="bar">柱状图</option>
+                <option value="line">折线图</option>
+                <option value="pie">饼图</option>
+                <option value="scatter">散点图</option>
+                <option value="funnel">漏斗图</option>
+                <option value="table">仅表格</option>
+              </select>
+            </div>
+          )}
 
           {/* Data table */}
           {queryResult && queryResult.rows.length > 0 && (
             <div className="pt-2 pb-1">
-              <DataTable queryResult={queryResult} />
+              <DataTable queryResult={queryResult} defaultExpanded={isTableMode} />
             </div>
           )}
 

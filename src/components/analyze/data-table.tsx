@@ -15,13 +15,14 @@ import { QueryResult } from "@/types";
 
 interface DataTableProps {
   queryResult: QueryResult;
+  defaultExpanded?: boolean;
 }
 
 const PAGE_SIZE = 10;
 const MAX_ROWS = 100;
 
-export function DataTable({ queryResult }: DataTableProps) {
-  const [expanded, setExpanded] = useState(false);
+export function DataTable({ queryResult, defaultExpanded = false }: DataTableProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [page, setPage] = useState(0);
   const [copied, setCopied] = useState(false);
 

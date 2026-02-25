@@ -40,7 +40,7 @@ ${question}
 {
   "sql": "完整的 SQL 查询语句",
   "chart": {
-    "type": "line | bar | pie | scatter | heatmap | funnel",
+    "type": "line | bar | pie | scatter | heatmap | funnel | table",
     "xField": "X轴字段名",
     "yField": "Y轴字段名（聚合值）",
     "seriesField": "系列字段名（可选，用于多系列图表）",
@@ -52,6 +52,7 @@ ${question}
 注意事项:
 - SQL 必须只使用上面列出的表和字段
 - 饼图的 type 使用 "pie"，xField 是分类字段，yField 是数值字段
+- 当用户想查看明细数据、原始记录、列表详情时，type 使用 "table"，此时不需要聚合，直接 SELECT 需要的字段即可
 - 根据问题选择最合适的图表类型
 - 洞察要具体，包含数字，给出业务意义的解读
 - 只返回 JSON，不要返回其他任何内容`;

@@ -31,7 +31,7 @@ export interface AnalysisResult {
 }
 
 export interface ChartConfig {
-  type: "line" | "bar" | "pie" | "scatter" | "heatmap" | "funnel";
+  type: "line" | "bar" | "pie" | "scatter" | "heatmap" | "funnel" | "table";
   xField?: string;
   yField?: string;
   seriesField?: string;
