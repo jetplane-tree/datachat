@@ -10,7 +10,7 @@ import { AnalysisList } from "@/components/analyze/analysis-list";
 import { Database, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccessGate, useAccessCode } from "@/components/access-gate";
-import { Message, AnalysisResult } from "@/types";
+import { Message, AnalysisResult, QueryResult } from "@/types";
 
 export default function AnalyzePage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -130,6 +130,23 @@ export default function AnalyzePage() {
     [handleSubmit]
   );
 
+  const handleUpdateResult = useCallback(
+    (messageId: string, queryResult: QueryResult, sql: string) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...m,
+                queryResult,
+                analysis: m.analysis ? { ...m.analysis, sql } : m.analysis,
+              }
+            : m
+        )
+      );
+    },
+    []
+  );
+
   if (!dataset) return null;
 
   // Show access gate if no code stored yet
@@ -178,6 +195,8 @@ export default function AnalyzePage() {
                     isAnalyzing={isAnalyzing}
                     analyzeStage={analyzeStage}
                     onRetry={handleRetry}
+                    onUpdateResult={handleUpdateResult}
+                    accessCode={accessCode}
                   />
                 )}
               </div>

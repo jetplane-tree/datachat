@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccessGate, useAccessCode } from "@/components/access-gate";
-import { Dataset, Message, AnalysisResult } from "@/types";
+import { Dataset, Message, AnalysisResult, QueryResult } from "@/types";
 
 const TABLE_NAME = "uploaded_data";
 const MAX_FILE_SIZE_WARNING = 10 * 1024 * 1024; // 10MB
@@ -248,6 +248,23 @@ export default function CustomAnalyzePage() {
     [handleSubmit]
   );
 
+  const handleUpdateResult = useCallback(
+    (messageId: string, queryResult: QueryResult, sql: string) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...m,
+                queryResult,
+                analysis: m.analysis ? { ...m.analysis, sql } : m.analysis,
+              }
+            : m
+        )
+      );
+    },
+    []
+  );
+
   // Upload UI — shown when no data is loaded yet
   if (!codeLoaded) return null;
   if (!accessCode) {
@@ -381,6 +398,8 @@ export default function CustomAnalyzePage() {
                     messages={messages}
                     isAnalyzing={isAnalyzing}
                     onRetry={handleRetry}
+                    onUpdateResult={handleUpdateResult}
+                    accessCode={accessCode}
                   />
                 )}
               </div>

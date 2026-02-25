@@ -3,13 +3,15 @@
 import { useEffect, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AnalysisCard } from "@/components/analyze/analysis-card";
-import { Message } from "@/types";
+import { Message, QueryResult } from "@/types";
 
 interface AnalysisListProps {
   messages: Message[];
   isAnalyzing: boolean;
   analyzeStage?: string;
   onRetry?: (question: string) => void;
+  onUpdateResult?: (messageId: string, queryResult: QueryResult, sql: string) => void;
+  accessCode?: string;
 }
 
 export function AnalysisList({
@@ -17,6 +19,8 @@ export function AnalysisList({
   isAnalyzing,
   analyzeStage,
   onRetry,
+  onUpdateResult,
+  accessCode,
 }: AnalysisListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -44,6 +48,8 @@ export function AnalysisList({
             assistantMessage={pair.assistant}
             isFollowUp={index > 0}
             onRetry={onRetry}
+            onUpdateResult={onUpdateResult}
+            accessCode={accessCode}
             analyzeStage={
               index === pairs.length - 1 && isAnalyzing
                 ? analyzeStage
