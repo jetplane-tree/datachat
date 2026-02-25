@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Message } from "@/types";
 import { ChartRenderer } from "@/components/analyze/chart-renderer";
+import { DataTable } from "@/components/analyze/data-table";
 
 interface AnalysisCardProps {
   userMessage: Message;
@@ -160,6 +161,13 @@ export function AnalysisCard({
               </div>
             )}
           </div>
+
+          {/* Data table */}
+          {queryResult && queryResult.rows.length > 0 && (
+            <div className="pt-2 pb-1">
+              <DataTable queryResult={queryResult} />
+            </div>
+          )}
 
           {/* Insight */}
           <div className="mx-5 rounded-lg border border-indigo-100/60 bg-indigo-50/30 px-4 py-3">
