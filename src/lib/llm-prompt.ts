@@ -21,11 +21,14 @@ export function buildAnalysisPrompt(
 ${schemaInfo}
 
 ## SQL 方言
-使用 DuckDB SQL 语法。注意：
-- 日期函数使用 DuckDB 语法 (如 DATE_TRUNC, EXTRACT, DATE_PART)
+使用 SQLite SQL 语法。注意：
+- 日期函数使用 SQLite 语法 (如 strftime('%Y-%m', date_col), date(), julianday())
 - 字符串使用单引号
 - 支持 CTE (WITH 子句)
-- 支持窗口函数
+- 支持窗口函数 (ROW_NUMBER, RANK, LAG, LEAD 等)
+- 布尔值存储为 INTEGER (0/1)，使用 WHERE col = 1 而非 WHERE col = true
+- 不支持 DATE_TRUNC，使用 strftime 替代
+- 不支持 EXTRACT，使用 strftime 替代，例如 strftime('%Y', date_col) 取年份
 
 ${historyContext ? `## 对话上下文\n${historyContext}\n` : ""}
 
