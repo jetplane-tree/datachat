@@ -4,8 +4,6 @@ import { useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
-  Copy,
-  Check,
   AlertCircle,
   BarChart3,
   RefreshCw,
