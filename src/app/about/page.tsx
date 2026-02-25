@@ -30,8 +30,8 @@ const techStack = [
     description: "高质量可定制组件库，基于 Radix UI",
   },
   {
-    name: "DuckDB WASM",
-    description: "浏览器端高性能 SQL 引擎，无需后端即可查询数据",
+    name: "Turso (SQLite)",
+    description: "云端 SQLite 数据库，服务端高性能 SQL 查询执行",
   },
   {
     name: "ECharts",
@@ -56,8 +56,8 @@ const flowSteps = [
   },
   {
     icon: Database,
-    label: "DuckDB WASM",
-    description: "浏览器端执行查询",
+    label: "Turso (SQLite)",
+    description: "服务端执行 SQL 查询",
   },
   {
     icon: BarChart3,
@@ -89,7 +89,7 @@ export default function AboutPage() {
               支持自定义数据上传
             </Badge>
             <Badge variant="secondary" className="text-xs font-normal">
-              浏览器端 SQL 执行
+              服务端 SQL 执行
             </Badge>
             <Badge variant="secondary" className="text-xs font-normal">
               自动图表生成
