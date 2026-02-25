@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { useDuckDB } from "@/hooks/use-duckdb";
 import { Header } from "@/components/layout/header";
 import { DataSidebar } from "@/components/analyze/data-sidebar";
 import { QueryInput } from "@/components/analyze/query-input";
@@ -17,14 +16,16 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccessGate, useAccessCode } from "@/components/access-gate";
-import { Dataset, Message, AnalysisResult, QueryResult } from "@/types";
+import { Dataset, Message, AnalysisResult } from "@/types";
 
 const TABLE_NAME = "uploaded_data";
 const MAX_FILE_SIZE_WARNING = 10 * 1024 * 1024; // 10MB
 
 export default function CustomAnalyzePage() {
-  const { isLoading, isReady, error, loadCustomData, runQuery } = useDuckDB();
   const { code: accessCode, loaded: codeLoaded, saveCode, clearCode } = useAccessCode();
+  const [isReady, setIsReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -57,8 +58,26 @@ export default function CustomAnalyzePage() {
           throw new Error("文件中没有数据行");
         }
 
-        // Load data into DuckDB
-        await loadCustomData(TABLE_NAME, rows, columns);
+        // Upload data to server
+        setIsLoading(true);
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tableName: TABLE_NAME,
+            columns,
+            rows,
+            accessCode,
+          }),
+        });
+
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) {
+          throw new Error(uploadData.error || "数据上传失败");
+        }
+
+        setIsReady(true);
+        setIsLoading(false);
 
         // Build a temporary Dataset object
         const presetQuestions = generatePresetQuestions(columns);
@@ -85,12 +104,13 @@ export default function CustomAnalyzePage() {
         const msg =
           err instanceof Error ? err.message : "文件解析失败，请重试";
         setUploadError(msg);
+        setIsLoading(false);
         console.error("File parse error:", err);
       } finally {
         setIsParsing(false);
       }
     },
-    [loadCustomData]
+    [accessCode]
   );
 
   const handleFileInputChange = useCallback(
@@ -129,7 +149,7 @@ export default function CustomAnalyzePage() {
 
   const handleSubmit = useCallback(
     async (question: string) => {
-      if (!dataset || !isReady || isAnalyzing) return;
+      if (!dataset || isAnalyzing) return;
 
       const userMessage: Message = {
         id: `msg-${Date.now()}`,
@@ -182,71 +202,13 @@ export default function CustomAnalyzePage() {
           insight: data.insight,
         };
 
-        // Execute SQL via DuckDB — with auto-retry
-        let queryResult: QueryResult;
-        try {
-          queryResult = await runQuery(analysis.sql);
-        } catch (sqlErr) {
-          const sqlErrMsg =
-            sqlErr instanceof Error ? sqlErr.message : "未知错误";
-
-          // Auto-retry: send error back to LLM for a corrected SQL
-          try {
-            const retryRes = await fetch("/api/analyze", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                question: `之前生成的 SQL 执行失败，错误信息: "${sqlErrMsg}"。原始SQL: ${analysis.sql}。请修正 SQL 并重新回答原始问题: ${question}`,
-                datasetId: "custom",
-                schemaInfo,
-                conversationHistory: messages.slice(-6),
-                accessCode,
-              }),
-            });
-
-            const retryData = await retryRes.json();
-
-            if (retryRes.ok && retryData.sql) {
-              analysis.sql = retryData.sql;
-              analysis.chart = retryData.chart || analysis.chart;
-              analysis.insight = retryData.insight || analysis.insight;
-              queryResult = await runQuery(retryData.sql);
-            } else {
-              throw new Error(sqlErrMsg);
-            }
-          } catch {
-            throw new Error(`SQL 执行失败: ${sqlErrMsg}`);
-          }
-        }
-
-        // Handle empty results
-        if (queryResult.rows.length === 0) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    content: analysis.insight,
-                    analysis,
-                    queryResult,
-                  }
-                : m
-            )
-          );
-        } else {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    content: analysis.insight,
-                    analysis,
-                    queryResult,
-                  }
-                : m
-            )
-          );
-        }
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: analysis.insight, analysis, queryResult: data.queryResult }
+              : m
+          )
+        );
       } catch (err) {
         const errMsg =
           err instanceof Error ? err.message : "分析失败，请重试";
@@ -261,7 +223,7 @@ export default function CustomAnalyzePage() {
         setIsAnalyzing(false);
       }
     },
-    [dataset, isReady, isAnalyzing, messages, runQuery, accessCode, clearCode]
+    [dataset, isAnalyzing, messages, accessCode, clearCode]
   );
 
   // Retry handler for error cards
@@ -353,7 +315,7 @@ export default function CustomAnalyzePage() {
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
           <p className="text-sm">
-            {isParsing ? "正在解析文件..." : "正在加载数据引擎..."}
+            {isParsing ? "正在解析文件..." : "正在上传数据..."}
           </p>
         </div>
       </div>
@@ -383,21 +345,6 @@ export default function CustomAnalyzePage() {
 
         {/* Main area */}
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Loading state */}
-          {isLoading && (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
-              <p className="text-sm">正在加载数据引擎...</p>
-            </div>
-          )}
-
-          {/* Error state */}
-          {error && (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-destructive">
-              <p className="text-sm">{error}</p>
-            </div>
-          )}
-
           {/* Ready state */}
           {isReady && dataset && (
             <>
