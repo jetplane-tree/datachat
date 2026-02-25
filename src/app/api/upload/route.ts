@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTursoClient } from "@/lib/turso";
 import { ColumnInfo } from "@/types";
+import type { InValue } from "@libsql/client";
 
 const ACCESS_CODE = process.env.ACCESS_CODE || "";
 
@@ -52,9 +53,9 @@ export async function POST(request: NextRequest) {
 
       // Build VALUES clause with positional parameters
       const placeholders = batch
-        .map((_, rowIdx) => {
+        .map(() => {
           const rowPlaceholders = columns
-            .map((_, colIdx) => `?`)
+            .map(() => `?`)
             .join(", ");
           return `(${rowPlaceholders})`;
         })
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
 
       await db.execute({
         sql: `INSERT INTO ${safeName} (${colNames}) VALUES ${placeholders}`,
-        args: args as any[],
+        args: args as InValue[],
       });
     }
 

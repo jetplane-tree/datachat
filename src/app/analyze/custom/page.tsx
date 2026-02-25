@@ -25,7 +25,6 @@ export default function CustomAnalyzePage() {
   const { code: accessCode, loaded: codeLoaded, saveCode, clearCode } = useAccessCode();
   const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -323,13 +322,13 @@ export default function CustomAnalyzePage() {
   }
 
   // Error state
-  if (error && !dataset) {
+  if (uploadError && !dataset) {
     return (
       <div className="flex h-screen flex-col bg-background">
         <Header />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-destructive">
           <AlertTriangle className="h-6 w-6" />
-          <p className="text-sm">{error}</p>
+          <p className="text-sm">{uploadError}</p>
         </div>
       </div>
     );
