@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getDatasetById, getSchemaPrompt } from "@/lib/dataset-registry";
 import { buildAnalysisPrompt } from "@/lib/llm-prompt";
+import { executeQuery } from "@/lib/turso";
 import { Message } from "@/types";
 
 const client = new OpenAI({
@@ -152,7 +153,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ sql, chart, insight }, {
+    // Execute SQL via Turso
+    let queryResult;
+    try {
+      queryResult = await executeQuery(sql);
+    } catch (sqlErr) {
+      const sqlErrMsg = sqlErr instanceof Error ? sqlErr.message : "未知错误";
+
+      // Auto-retry: ask LLM to fix the SQL
+      try {
+        const retryPrompt = buildAnalysisPrompt(
+          schemaInfo,
+          `之前生成的 SQL 执行失败，错误信息: "${sqlErrMsg}"。原始SQL: ${sql}。请修正 SQL 并重新回答原始问题: ${question}`,
+          conversationHistory
+        );
+
+        const retryCompletion = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: "system", content: "你是一个专业的数据分析助手，只返回 JSON 格式的分析结果。" },
+            { role: "user", content: retryPrompt },
+          ],
+          temperature: 0.1,
+          max_tokens: 2000,
+        });
+
+        const retryRaw = retryCompletion.choices[0]?.message?.content || "";
+        const retryJson = extractJSON(retryRaw);
+        const retryParsed = JSON.parse(retryJson);
+
+        if (retryParsed.sql) {
+          queryResult = await executeQuery(retryParsed.sql);
+          return NextResponse.json({
+            sql: retryParsed.sql,
+            chart: retryParsed.chart || chart,
+            insight: retryParsed.insight || insight,
+            queryResult,
+          }, {
+            headers: { "X-RateLimit-Remaining": String(remaining) },
+          });
+        }
+      } catch {
+        // Retry also failed
+      }
+
+      return NextResponse.json({ error: `SQL 执行失败: ${sqlErrMsg}` }, { status: 500 });
+    }
+
+    return NextResponse.json({ sql, chart, insight, queryResult }, {
       headers: { "X-RateLimit-Remaining": String(remaining) },
     });
   } catch (error: unknown) {
