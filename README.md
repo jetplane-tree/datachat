@@ -73,7 +73,21 @@ npm run dev
 
 ## 部署
 
-推荐部署到 [Vercel](https://vercel.com)，在项目设置中配置上述环境变量即可。
+推荐部署到 [Vercel](https://vercel.com)：
+
+1. 在 Vercel 导入 GitHub 仓库
+2. 在项目 **Settings → Environment Variables** 中添加以下所有环境变量：
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `LLM_API_KEY` | ✅ | LLM API 密钥 |
+| `LLM_BASE_URL` | ✅ | API 地址，如 `https://api.deepseek.com` |
+| `LLM_MODEL` | ✅ | 模型名称，如 `deepseek-chat` |
+| `TURSO_DATABASE_URL` | ✅ | Turso 数据库 URL，如 `libsql://your-db.turso.io` |
+| `TURSO_AUTH_TOKEN` | ✅ | Turso 认证令牌 |
+| `ACCESS_CODE` | 可选 | 访问密码，留空则关闭 |
+
+3. 部署后即可访问
 
 ## 作者
 
