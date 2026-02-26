@@ -8,6 +8,7 @@ import {
   BarChart3,
   MessageSquare,
   Code2,
+  Github,
   Mail,
   User,
 } from "lucide-react";
@@ -190,6 +191,15 @@ export default function AboutPage() {
                     >
                       <Mail className="h-3.5 w-3.5" />
                       aloiwatermelon@hotmail.com
+                    </a>
+                    <a
+                      href="https://github.com/jetplane-tree/datachat"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <Github className="h-3.5 w-3.5" />
+                      GitHub
                     </a>
                   </div>
                 </div>
