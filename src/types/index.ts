@@ -22,11 +22,33 @@ export interface Dataset {
   presetQuestions: string[];
 }
 
+// Analysis stages
+export type AnalysisStage = "overview" | "breakdown" | "drill" | "anomaly" | "action";
+
+// Structured insight
+export interface InsightHighlight {
+  type: "stat" | "anomaly" | "action";
+  text: string;
+}
+
+export interface InsightResult {
+  summary: string;
+  highlights: InsightHighlight[];
+}
+
+// Follow-up questions
+export interface FollowUpQuestion {
+  text: string;
+  stage: AnalysisStage;
+}
+
 // LLM response
 export interface AnalysisResult {
   sql: string;
   chart: ChartConfig;
-  insight: string;
+  insight: InsightResult;
+  followUpQuestions: FollowUpQuestion[];
+  analysisStage: AnalysisStage;
 }
 
 export interface ChartConfig {
