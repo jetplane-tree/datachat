@@ -18,7 +18,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChartConfig, InsightResult, Message, QueryResult } from "@/types";
+import { ChartConfig, Message, QueryResult } from "@/types";
 import { ChartRenderer } from "@/components/analyze/chart-renderer";
 import { DataTable } from "@/components/analyze/data-table";
 

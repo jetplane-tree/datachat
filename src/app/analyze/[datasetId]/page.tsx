@@ -110,7 +110,7 @@ export default function AnalyzePage() {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, content: analysis.insight, analysis, queryResult: data.queryResult }
+              ? { ...m, content: analysis.insight.summary, analysis, queryResult: data.queryResult }
               : m
           )
         );
