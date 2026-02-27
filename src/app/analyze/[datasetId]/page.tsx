@@ -100,7 +100,11 @@ export default function AnalyzePage() {
         const analysis: AnalysisResult = {
           sql: data.sql,
           chart: data.chart,
-          insight: data.insight,
+          insight: typeof data.insight === "string"
+            ? { summary: data.insight, highlights: [] }
+            : data.insight,
+          followUpQuestions: data.followUpQuestions || [],
+          analysisStage: data.analysisStage || "overview",
         };
 
         setMessages((prev) =>
@@ -218,6 +222,7 @@ export default function AnalyzePage() {
                   isAnalyzing={isAnalyzing}
                   analyzeStage={analyzeStage}
                   onRetry={handleRetry}
+                  onFollowUp={handleSubmit}
                   onUpdateResult={handleUpdateResult}
                   accessCode={accessCode}
                 />

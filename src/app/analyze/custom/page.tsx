@@ -202,7 +202,11 @@ export default function CustomAnalyzePage() {
         const analysis: AnalysisResult = {
           sql: data.sql,
           chart: data.chart,
-          insight: data.insight,
+          insight: typeof data.insight === "string"
+            ? { summary: data.insight, highlights: [] }
+            : data.insight,
+          followUpQuestions: data.followUpQuestions || [],
+          analysisStage: data.analysisStage || "overview",
         };
 
         setMessages((prev) =>
@@ -402,6 +406,7 @@ export default function CustomAnalyzePage() {
                     messages={messages}
                     isAnalyzing={isAnalyzing}
                     onRetry={handleRetry}
+                    onFollowUp={handleSubmit}
                     onUpdateResult={handleUpdateResult}
                     accessCode={accessCode}
                   />

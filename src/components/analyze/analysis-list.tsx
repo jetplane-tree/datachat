@@ -10,6 +10,7 @@ interface AnalysisListProps {
   isAnalyzing: boolean;
   analyzeStage?: string;
   onRetry?: (question: string) => void;
+  onFollowUp?: (question: string) => void;
   onUpdateResult?: (messageId: string, queryResult: QueryResult, sql: string) => void;
   accessCode?: string;
 }
@@ -19,6 +20,7 @@ export function AnalysisList({
   isAnalyzing,
   analyzeStage,
   onRetry,
+  onFollowUp,
   onUpdateResult,
   accessCode,
 }: AnalysisListProps) {
@@ -48,6 +50,7 @@ export function AnalysisList({
             assistantMessage={pair.assistant}
             isFollowUp={index > 0}
             onRetry={onRetry}
+            onFollowUp={onFollowUp}
             onUpdateResult={onUpdateResult}
             accessCode={accessCode}
             analyzeStage={
