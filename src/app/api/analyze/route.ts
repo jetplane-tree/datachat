@@ -202,35 +202,40 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Step 3: LLM generates insight based on ACTUAL query results ──
-    const insightPrompt = buildInsightPrompt(
-      question, sql, queryResult.rows, conversationHistory, customInstructions
-    );
-
     let insightData = { summary: "", highlights: [] as { type: string; text: string }[] };
     let followUpQuestions: { text: string; stage: string }[] = [];
     let analysisStage = "overview";
 
-    try {
-      const insightCompletion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemMsg },
-          { role: "user", content: insightPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 1500,
-      });
+    if (!queryResult.rows || queryResult.rows.length === 0) {
+      // No data — skip insight LLM call, return clear message
+      insightData = { summary: "查询未返回数据，请尝试调整问题或检查筛选条件。", highlights: [] };
+    } else {
+      const insightPrompt = buildInsightPrompt(
+        question, sql, queryResult.rows, conversationHistory, customInstructions
+      );
 
-      const insightRaw = insightCompletion.choices[0]?.message?.content || "";
-      const insightJsonStr = extractJSON(insightRaw);
-      const insightParsed = JSON.parse(insightJsonStr);
+      try {
+        const insightCompletion = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: "system", content: systemMsg },
+            { role: "user", content: insightPrompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 1500,
+        });
 
-      insightData = normalizeInsight(insightParsed.insight);
-      followUpQuestions = insightParsed.followUpQuestions || [];
-      analysisStage = insightParsed.analysisStage || "overview";
-    } catch {
-      // Insight generation failed — return results with a fallback insight
-      insightData = { summary: "数据已查询成功，洞察生成失败，请查看表格数据。", highlights: [] };
+        const insightRaw = insightCompletion.choices[0]?.message?.content || "";
+        const insightJsonStr = extractJSON(insightRaw);
+        const insightParsed = JSON.parse(insightJsonStr);
+
+        insightData = normalizeInsight(insightParsed.insight);
+        followUpQuestions = insightParsed.followUpQuestions || [];
+        analysisStage = insightParsed.analysisStage || "overview";
+      } catch {
+        // Insight generation failed — return results with a fallback insight
+        insightData = { summary: "数据已查询成功，洞察生成失败，请查看表格数据。", highlights: [] };
+      }
     }
 
     return NextResponse.json({
