@@ -5,17 +5,20 @@ import {
   ChevronDown,
   ChevronRight,
   AlertCircle,
+  AlertTriangle,
   BarChart3,
   RefreshCw,
   MessageSquare,
   WifiOff,
   Play,
   Loader2,
+  Lightbulb,
+  TrendingUp,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChartConfig, Message, QueryResult } from "@/types";
+import { ChartConfig, InsightResult, Message, QueryResult } from "@/types";
 import { ChartRenderer } from "@/components/analyze/chart-renderer";
 import { DataTable } from "@/components/analyze/data-table";
 
@@ -24,6 +27,7 @@ interface AnalysisCardProps {
   assistantMessage: Message;
   isFollowUp?: boolean;
   onRetry?: (question: string) => void;
+  onFollowUp?: (question: string) => void;
   onUpdateResult?: (messageId: string, queryResult: QueryResult, sql: string) => void;
   analyzeStage?: string;
   accessCode?: string;
@@ -73,11 +77,18 @@ function getFriendlyError(error: string): {
   return { message: error, isNetwork: false };
 }
 
+const highlightConfig = {
+  stat: { icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
+  anomaly: { icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
+  action: { icon: Lightbulb, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
+} as const;
+
 export function AnalysisCard({
   userMessage,
   assistantMessage,
   isFollowUp = false,
   onRetry,
+  onFollowUp,
   onUpdateResult,
   analyzeStage,
   accessCode,
@@ -259,10 +270,44 @@ export function AnalysisCard({
           )}
 
           {/* Insight */}
-          <div className="mx-5 rounded-lg border border-indigo-100/60 bg-indigo-50/30 px-4 py-3">
-            <p className="text-sm leading-relaxed text-foreground/90">
-              {analysis.insight}
-            </p>
+          <div className="mx-5 space-y-2">
+            {/* Summary */}
+            <div className="rounded-lg border border-indigo-100/60 bg-indigo-50/30 px-4 py-3">
+              <p className="text-sm font-medium leading-relaxed text-foreground/90">
+                {typeof analysis.insight === "string" ? analysis.insight : analysis.insight.summary}
+              </p>
+            </div>
+
+            {/* Highlights */}
+            {typeof analysis.insight === "object" && analysis.insight.highlights?.length > 0 && (
+              <div className="space-y-1.5">
+                {analysis.insight.highlights.map((h, i) => {
+                  const config = highlightConfig[h.type] || highlightConfig.stat;
+                  const Icon = config.icon;
+                  return (
+                    <div key={i} className={`flex items-start gap-2 rounded-md border ${config.border} ${config.bg} px-3 py-2`}>
+                      <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${config.color}`} />
+                      <p className="text-xs leading-relaxed text-foreground/80">{h.text}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Follow-up questions */}
+            {analysis.followUpQuestions?.length > 0 && onFollowUp && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {analysis.followUpQuestions.map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => onFollowUp(q.text)}
+                    className="rounded-full border border-indigo-200/60 bg-white px-3 py-1.5 text-xs text-indigo-600 transition-colors hover:bg-indigo-50 hover:border-indigo-300"
+                  >
+                    {q.text}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* SQL section */}
