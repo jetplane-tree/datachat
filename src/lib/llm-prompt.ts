@@ -1,12 +1,7 @@
 import { Message } from "@/types";
 
-export function buildAnalysisPrompt(
-  schemaInfo: string,
-  question: string,
-  conversationHistory: Message[],
-  customInstructions?: string
-): string {
-  const historyContext = conversationHistory
+function buildHistoryContext(conversationHistory: Message[]): string {
+  return conversationHistory
     .slice(-6)
     .map((m) => {
       if (m.role === "user") return `用户: ${m.content}`;
@@ -20,8 +15,20 @@ export function buildAnalysisPrompt(
     })
     .filter(Boolean)
     .join("\n");
+}
 
-  return `根据用户的问题，生成 SQL 查询语句、图表配置和结构化数据洞察。
+/**
+ * Step 1: Generate SQL + chart config (no insight — data not yet available)
+ */
+export function buildSqlPrompt(
+  schemaInfo: string,
+  question: string,
+  conversationHistory: Message[],
+  customInstructions?: string
+): string {
+  const historyContext = buildHistoryContext(conversationHistory);
+
+  return `根据用户的问题，生成 SQL 查询语句和图表配置。
 
 ## 数据库信息
 ${schemaInfo}
@@ -45,36 +52,13 @@ ${schemaInfo}
 - 转化漏斗（多步骤递减）→ funnel
 - 明细列表（查看原始记录、TOP N 明细）→ table
 
-## 分析阶段
-根据对话上下文判断当前分析阶段，并据此生成追问建议：
-- overview：总览全局数据（首次提问通常是这个阶段）
-- breakdown：按维度拆解（如按地区、按类目细分）
-- drill：深入某个具体发现（如某个月份、某个异常点）
-- anomaly：排查异常原因
-- action：给出行动建议
-
-追问建议应引导用户从 overview → breakdown → drill → action 逐步深入，但不要强制，用户可以跳到任何阶段。
-
 ## 示例
 
 问题: "各月销售额趋势"
 \`\`\`json
 {
   "sql": "SELECT strftime('%Y-%m', order_date) AS month, SUM(total_amount) AS total_sales FROM orders GROUP BY month ORDER BY month",
-  "chart": { "type": "line", "xField": "month", "yField": "total_sales", "title": "各月销售额趋势" },
-  "insight": {
-    "summary": "2024年销售额整体呈上升趋势，12月达到峰值 85.2 万元。",
-    "highlights": [
-      { "type": "stat", "text": "月均销售额 62.5 万元，环比平均增长 8.3%" },
-      { "type": "anomaly", "text": "8月销售额骤降 35%，偏离均值超过2个标准差" },
-      { "type": "action", "text": "建议关注 Q4 旺季备货策略，提前布局促销活动" }
-    ]
-  },
-  "followUpQuestions": [
-    { "text": "8月销售额下降的原因是什么？", "stage": "drill" },
-    { "text": "各地区的月度销售趋势如何？", "stage": "breakdown" }
-  ],
-  "analysisStage": "overview"
+  "chart": { "type": "line", "xField": "month", "yField": "total_sales", "title": "各月销售额趋势" }
 }
 \`\`\`
 
@@ -82,20 +66,7 @@ ${schemaInfo}
 \`\`\`json
 {
   "sql": "SELECT category, SUM(total_amount) AS total_sales FROM orders GROUP BY category ORDER BY total_sales DESC",
-  "chart": { "type": "pie", "xField": "category", "yField": "total_sales", "title": "各商品类目销售占比" },
-  "insight": {
-    "summary": "数码配件以 35.2% 的占比位居第一，贡献销售额 210 万元。",
-    "highlights": [
-      { "type": "stat", "text": "前三大类目合计占总销售额的 72%，HHI 集中度指数 0.21" },
-      { "type": "anomaly", "text": "家居日用类目占比仅 3.1%，远低于行业平均水平" },
-      { "type": "action", "text": "长尾类目可考虑精简，集中资源在头部类目" }
-    ]
-  },
-  "followUpQuestions": [
-    { "text": "数码配件的月度销售趋势如何？", "stage": "drill" },
-    { "text": "各类目的利润率对比如何？", "stage": "breakdown" }
-  ],
-  "analysisStage": "overview"
+  "chart": { "type": "pie", "xField": "category", "yField": "total_sales", "title": "各商品类目销售占比" }
 }
 \`\`\`
 
@@ -114,19 +85,7 @@ ${question}
     "yField": "Y轴字段名（必须与 SQL SELECT 中的列名或 AS 别名完全一致）",
     "seriesField": "系列字段名（可选，必须是 SELECT 中存在的列名）",
     "title": "图表标题"
-  },
-  "insight": {
-    "summary": "核心发现 + 关键数字（1句话）",
-    "highlights": [
-      { "type": "stat", "text": "统计指标" },
-      { "type": "anomaly", "text": "异常发现" },
-      { "type": "action", "text": "业务建议" }
-    ]
-  },
-  "followUpQuestions": [
-    { "text": "推荐的下一个分析问题", "stage": "breakdown | drill | anomaly | action" }
-  ],
-  "analysisStage": "当前分析阶段"
+  }
 }
 
 关键规则：
@@ -137,18 +96,76 @@ ${question}
 - 饼图的 type 使用 "pie"，xField 是分类字段，yField 是数值字段
 - 当用户想查看明细数据、原始记录、列表详情时，type 使用 "table"
 
-insight 要求：
-- summary：核心发现 + 关键数字（1句话）
+只返回 JSON，不要返回其他任何内容`;
+}
+
+/**
+ * Step 2: Generate insight + follow-up questions based on ACTUAL query results
+ */
+export function buildInsightPrompt(
+  question: string,
+  sql: string,
+  queryData: Record<string, unknown>[],
+  conversationHistory: Message[],
+  customInstructions?: string
+): string {
+  const historyContext = buildHistoryContext(conversationHistory);
+
+  // Limit data to first 50 rows to keep prompt manageable
+  const dataPreview = queryData.slice(0, 50);
+  const totalRows = queryData.length;
+  const dataStr = JSON.stringify(dataPreview, null, 2);
+
+  return `你是资深数据分析师。请根据以下实际查询结果，给出结构化的数据洞察和追问建议。
+
+## 用户问题
+${question}
+
+## 执行的 SQL
+${sql}
+
+## 查询结果（共 ${totalRows} 行${totalRows > 50 ? "，以下展示前 50 行" : ""}）
+${dataStr}
+
+## 分析阶段
+根据对话上下文判断当前分析阶段：
+- overview：总览全局数据（首次提问通常是这个阶段）
+- breakdown：按维度拆解（如按地区、按类目细分）
+- drill：深入某个具体发现（如某个月份、某个异常点）
+- anomaly：排查异常原因
+- action：给出行动建议
+
+追问建议应引导用户从 overview → breakdown → drill → action 逐步深入。
+
+${historyContext ? `## 对话上下文\n${historyContext}\n` : ""}
+${customInstructions ? `## 用户自定义指令\n${customInstructions}\n` : ""}
+
+## 输出要求
+基于上面的实际数据，返回严格的 JSON：
+{
+  "insight": {
+    "summary": "核心发现 + 关键数字（1句话，必须引用实际数据中的真实数值）",
+    "highlights": [
+      { "type": "stat", "text": "统计指标（基于真实数据计算）" },
+      { "type": "anomaly", "text": "异常发现（如有）" },
+      { "type": "action", "text": "业务建议" }
+    ]
+  },
+  "followUpQuestions": [
+    { "text": "推荐的下一个分析问题", "stage": "breakdown | drill | anomaly | action" }
+  ],
+  "analysisStage": "当前分析阶段"
+}
+
+关键规则：
+- 所有数字必须来自实际查询结果，禁止编造数据
+- summary 必须包含具体数字，禁止占位符如 [需填充]
 - highlights 包含 2-4 条，每条标记 type：
-  - stat：统计指标（均值、中位数、标准差、峰值、增长率、占比等）
-  - anomaly：异常发现（突增/骤降/偏离均值等，没有明显异常则省略此条）
+  - stat：统计指标（均值、中位数、峰值、增长率、占比等，从数据中计算）
+  - anomaly：异常发现（突增/骤降/偏离等，没有明显异常则省略此条）
   - action：业务建议（基于数据的可执行建议）
 - 禁止空洞描述如"数据呈现一定趋势"
-
-followUpQuestions 要求：
-- 生成 2-3 个追问建议，引导用户深入分析
-- 每个问题带 stage 标签，表示该问题属于哪个分析阶段
-- 问题要具体，与当前数据结果相关，不要泛泛而谈
+- followUpQuestions 生成 2-3 个，要具体，与当前数据结果相关
 
 只返回 JSON，不要返回其他任何内容`;
 }

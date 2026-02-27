@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getDatasetById } from "@/lib/dataset-registry";
-import { buildAnalysisPrompt } from "@/lib/llm-prompt";
+import { buildSqlPrompt, buildInsightPrompt } from "@/lib/llm-prompt";
 import { executeQuery, getDatasetSchema, buildSchemaPrompt } from "@/lib/turso";
 import { Message } from "@/types";
 
@@ -120,54 +120,44 @@ export async function POST(request: NextRequest) {
       const tables = await getDatasetSchema(dataset.tableNames);
       schemaInfo = buildSchemaPrompt(dataset.name, tables);
     }
-    const prompt = buildAnalysisPrompt(schemaInfo, question, conversationHistory, customInstructions);
+    const systemMsg = "你是一个资深数据分析师，精通 SQLite SQL 和数据可视化。严格只返回 JSON，不要包含任何其他文本。";
 
-    const completion = await client.chat.completions.create({
+    // ── Step 1: LLM generates SQL + chart config ──
+    const sqlPrompt = buildSqlPrompt(schemaInfo, question, conversationHistory, customInstructions);
+
+    const sqlCompletion = await client.chat.completions.create({
       model,
       messages: [
-        {
-          role: "system",
-          content: "你是一个资深数据分析师，精通 SQLite SQL 和数据可视化。你的任务是根据用户问题生成准确的 SQL、选择最佳图表类型、并给出有洞察力的分析。严格只返回 JSON，不要包含任何其他文本。",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
+        { role: "system", content: systemMsg },
+        { role: "user", content: sqlPrompt },
       ],
       temperature: 0.1,
-      max_tokens: 2000,
+      max_tokens: 1000,
     });
 
-    const rawResponse = completion.choices[0]?.message?.content || "";
-    const jsonStr = extractJSON(rawResponse);
+    const sqlRaw = sqlCompletion.choices[0]?.message?.content || "";
+    const sqlJsonStr = extractJSON(sqlRaw);
 
-    let parsed;
+    let sqlParsed;
     try {
-      parsed = JSON.parse(jsonStr);
+      sqlParsed = JSON.parse(sqlJsonStr);
     } catch {
       return NextResponse.json(
-        {
-          error: "LLM 返回格式异常，无法解析",
-          raw: rawResponse,
-        },
+        { error: "LLM 返回格式异常，无法解析", raw: sqlRaw },
         { status: 500 }
       );
     }
 
-    const { sql, chart, insight, followUpQuestions, analysisStage } = parsed;
-    const normalizedInsight = normalizeInsight(insight);
+    let { sql, chart } = sqlParsed;
 
-    if (!sql || !chart || !normalizedInsight.summary) {
+    if (!sql || !chart) {
       return NextResponse.json(
-        {
-          error: "LLM 返回结果不完整，缺少必要字段",
-          raw: rawResponse,
-        },
+        { error: "LLM 返回结果不完整，缺少 sql 或 chart", raw: sqlRaw },
         { status: 500 }
       );
     }
 
-    // Execute SQL via Turso
+    // ── Step 2: Execute SQL via Turso ──
     let queryResult;
     try {
       queryResult = await executeQuery(sql);
@@ -176,7 +166,7 @@ export async function POST(request: NextRequest) {
 
       // Auto-retry: ask LLM to fix the SQL
       try {
-        const retryPrompt = buildAnalysisPrompt(
+        const retryPrompt = buildSqlPrompt(
           schemaInfo,
           `之前生成的 SQL 执行失败，错误信息: "${sqlErrMsg}"。原始SQL: ${sql}。请修正 SQL 并重新回答原始问题: ${question}`,
           conversationHistory,
@@ -186,11 +176,11 @@ export async function POST(request: NextRequest) {
         const retryCompletion = await client.chat.completions.create({
           model,
           messages: [
-            { role: "system", content: "你是一个资深数据分析师，精通 SQLite SQL 和数据可视化。你的任务是根据用户问题生成准确的 SQL、选择最佳图表类型、并给出有洞察力的分析。严格只返回 JSON，不要包含任何其他文本。" },
+            { role: "system", content: systemMsg },
             { role: "user", content: retryPrompt },
           ],
           temperature: 0.1,
-          max_tokens: 2000,
+          max_tokens: 1000,
         });
 
         const retryRaw = retryCompletion.choices[0]?.message?.content || "";
@@ -198,31 +188,57 @@ export async function POST(request: NextRequest) {
         const retryParsed = JSON.parse(retryJson);
 
         if (retryParsed.sql) {
-          queryResult = await executeQuery(retryParsed.sql);
-          return NextResponse.json({
-            sql: retryParsed.sql,
-            chart: retryParsed.chart || chart,
-            insight: normalizeInsight(retryParsed.insight || insight),
-            followUpQuestions: retryParsed.followUpQuestions || followUpQuestions || [],
-            analysisStage: retryParsed.analysisStage || analysisStage || "overview",
-            queryResult,
-          }, {
-            headers: { "X-RateLimit-Remaining": String(remaining) },
-          });
+          sql = retryParsed.sql;
+          chart = retryParsed.chart || chart;
+          queryResult = await executeQuery(sql);
         }
       } catch {
         // Retry also failed
       }
 
-      return NextResponse.json({ error: `SQL 执行失败: ${sqlErrMsg}` }, { status: 500 });
+      if (!queryResult) {
+        return NextResponse.json({ error: `SQL 执行失败: ${sqlErrMsg}` }, { status: 500 });
+      }
+    }
+
+    // ── Step 3: LLM generates insight based on ACTUAL query results ──
+    const insightPrompt = buildInsightPrompt(
+      question, sql, queryResult.rows, conversationHistory, customInstructions
+    );
+
+    let insightData = { summary: "", highlights: [] as { type: string; text: string }[] };
+    let followUpQuestions: { text: string; stage: string }[] = [];
+    let analysisStage = "overview";
+
+    try {
+      const insightCompletion = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: systemMsg },
+          { role: "user", content: insightPrompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 1500,
+      });
+
+      const insightRaw = insightCompletion.choices[0]?.message?.content || "";
+      const insightJsonStr = extractJSON(insightRaw);
+      const insightParsed = JSON.parse(insightJsonStr);
+
+      insightData = normalizeInsight(insightParsed.insight);
+      followUpQuestions = insightParsed.followUpQuestions || [];
+      analysisStage = insightParsed.analysisStage || "overview";
+    } catch {
+      // Insight generation failed — return results with a fallback insight
+      insightData = { summary: "数据已查询成功，洞察生成失败，请查看表格数据。", highlights: [] };
     }
 
     return NextResponse.json({
       sql,
       chart,
-      insight: normalizedInsight,
-      followUpQuestions: followUpQuestions || [],
-      analysisStage: analysisStage || "overview",
+      insight: insightData,
+      followUpQuestions,
+      analysisStage,
       queryResult,
     }, {
       headers: { "X-RateLimit-Remaining": String(remaining) },
