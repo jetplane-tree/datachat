@@ -49,6 +49,16 @@ function extractJSON(text: string): string {
   return text.trim();
 }
 
+function normalizeInsight(insight: unknown): { summary: string; highlights: { type: string; text: string }[] } {
+  if (typeof insight === "string") {
+    return { summary: insight, highlights: [] };
+  }
+  if (insight && typeof insight === "object" && "summary" in insight) {
+    return insight as { summary: string; highlights: { type: string; text: string }[] };
+  }
+  return { summary: String(insight || ""), highlights: [] };
+}
+
 export async function POST(request: NextRequest) {
   try {
     // ── Access code check ──
@@ -144,9 +154,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { sql, chart, insight } = parsed;
+    const { sql, chart, insight, followUpQuestions, analysisStage } = parsed;
+    const normalizedInsight = normalizeInsight(insight);
 
-    if (!sql || !chart || !insight) {
+    if (!sql || !chart || !normalizedInsight.summary) {
       return NextResponse.json(
         {
           error: "LLM 返回结果不完整，缺少必要字段",
@@ -191,7 +202,9 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({
             sql: retryParsed.sql,
             chart: retryParsed.chart || chart,
-            insight: retryParsed.insight || insight,
+            insight: normalizeInsight(retryParsed.insight || insight),
+            followUpQuestions: retryParsed.followUpQuestions || followUpQuestions || [],
+            analysisStage: retryParsed.analysisStage || analysisStage || "overview",
             queryResult,
           }, {
             headers: { "X-RateLimit-Remaining": String(remaining) },
@@ -204,7 +217,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `SQL 执行失败: ${sqlErrMsg}` }, { status: 500 });
     }
 
-    return NextResponse.json({ sql, chart, insight, queryResult }, {
+    return NextResponse.json({
+      sql,
+      chart,
+      insight: normalizedInsight,
+      followUpQuestions: followUpQuestions || [],
+      analysisStage: analysisStage || "overview",
+      queryResult,
+    }, {
       headers: { "X-RateLimit-Remaining": String(remaining) },
     });
   } catch (error: unknown) {
