@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans, Newsreader } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -34,6 +35,7 @@ export default function RootLayout({
         <TooltipProvider delayDuration={300}>
           {children}
         </TooltipProvider>
+        <Analytics />
       </body>
     </html>
   );
