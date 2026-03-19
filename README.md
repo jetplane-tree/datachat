@@ -91,4 +91,4 @@ npm run dev
 
 ## 作者
 
-**Kamook** — aloiwatermelon@hotmail.com
+**Kamook** — kamook0201@gmail.com.com
